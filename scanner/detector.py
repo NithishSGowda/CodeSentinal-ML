@@ -1,10 +1,6 @@
-"""
-This module performs static analysis on the source code.
-It extracts metadata, calculates code statistics, and finds suspicious keywords.
-"""
-
 import os
-from .patterns import SUSPICIOUS_KEYWORDS, LANGUAGE_MAP
+import re
+from .patterns import VULNERABILITY_PATTERNS, LANGUAGE_MAP
 
 def get_language(filename):
     """Detect the programming language based on the file extension."""
@@ -45,7 +41,7 @@ def analyze_code_statistics(lines):
             stats["blank_lines"] += 1
             continue
         
-        # Basic comment detection (handles Python, JS, Java, PHP partially)
+        # Basic comment detection
         if stripped.startswith("#") or stripped.startswith("//") or stripped.startswith("/*") or stripped.startswith("*"):
             stats["comments"] += 1
             
@@ -63,23 +59,49 @@ def analyze_code_statistics(lines):
 
     return stats
 
-def find_suspicious_keywords(content):
-    """Count occurrences of suspicious keywords in the source code."""
-    findings = {}
-    content_lower = content.lower()
+def scan_vulnerabilities(lines):
+    """
+    Scan code line-by-line using regex patterns.
+    Returns a list of structured findings.
+    """
+    findings = []
     
-    for keyword in SUSPICIOUS_KEYWORDS:
-        count = content_lower.count(keyword.lower())
-        if count > 0:
-            findings[keyword] = count
+    for line_num, line in enumerate(lines, 1):
+        line = line.strip()
+        if not line or line.startswith("#"): # Skip empty lines and full comments
+            continue
             
+        for pattern in VULNERABILITY_PATTERNS:
+            # Case insensitive search
+            if re.search(pattern["regex"], line, re.IGNORECASE):
+                findings.append({
+                    "issue": pattern["name"],
+                    "severity": pattern["severity"],
+                    "line": line_num,
+                    "matched_code": line[:100], # Truncate long lines
+                    "description": pattern["description"]
+                })
+                
     return findings
 
-def generate_security_summary(findings_count):
-    """Generate a simple rule-based security summary."""
-    if findings_count == 0:
-        return "Low suspicious activity detected.", "success"
-    elif findings_count <= 2:
-        return "Potentially risky code indicators present.", "warning"
+def generate_security_summary(findings):
+    """Generate a rule-based security summary and calculate security score."""
+    if not findings:
+        return "No significant vulnerabilities detected. Code appears clean.", "success", 100
+    
+    severity_counts = {
+        "High": len([f for f in findings if f["severity"] == "High"]),
+        "Medium": len([f for f in findings if f["severity"] == "Medium"]),
+        "Low": len([f for f in findings if f["severity"] == "Low"])
+    }
+    
+    # Calculate simple security score (0-100)
+    score = 100 - (severity_counts["High"] * 25 + severity_counts["Medium"] * 10 + severity_counts["Low"] * 2)
+    score = max(0, score)
+    
+    if severity_counts["High"] > 0:
+        return f"CRITICAL: {severity_counts['High']} high-severity vulnerabilities detected. Immediate action required.", "error", score
+    elif severity_counts["Medium"] > 0:
+        return f"WARNING: {severity_counts['Medium']} medium-severity issues found. Potential security risks identified.", "warning", score
     else:
-        return "Multiple dangerous keywords found. Review recommended.", "error"
+        return f"NOTICE: {len(findings)} low-severity findings. General code quality improvements suggested.", "info", score
