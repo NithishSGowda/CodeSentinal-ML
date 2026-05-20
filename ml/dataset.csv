@@ -1,2 +1,61 @@
-id,code_snippet,is_vulnerable
-1,"print('Hello World')",0
+code,label
+"def get_user(id): return db.query('SELECT * FROM users WHERE id = ' + id)",High Risk
+"def execute_cmd(cmd): os.system(cmd)",High Risk
+"eval(user_input)",High Risk
+"subprocess.Popen(request.args.get('cmd'), shell=True)",High Risk
+"exec(req.body.script)",High Risk
+"pickle.loads(request.data)",High Risk
+"yaml.load(user_file)",High Risk
+"query = f'SELECT * FROM data WHERE name = {name}'",High Risk
+"cursor.execute('DELETE FROM users WHERE id = {}'.format(user_id))",High Risk
+"import os; os.system('rm -rf /')",High Risk
+"password = 'admin123'",Medium Risk
+"api_key = 'AIzaSyAXXXXXXX'",Medium Risk
+"SECRET_KEY = 'super_secret_key_123'",Medium Risk
+"def test(): TODO: add auth later",Medium Risk
+"print('DEBUG: user logged in as admin')",Medium Risk
+"def get_data(req): return req.query.id",Medium Risk
+"file = open(request.args.get('file'), 'r')",High Risk
+"def login(user, pw): return f'SELECT * FROM users WHERE user={user} AND pw={pw}'",High Risk
+"def safe_get_user(id): return db.query('SELECT * FROM users WHERE id = ?', (id,))",Safe
+"def hello(): print('Hello World')",Safe
+"class User: def __init__(self, name): self.name = name",Safe
+"import math; result = math.sqrt(16)",Safe
+"def calculate_tax(amount): return amount * 0.2",Safe
+"def get_time(): return datetime.now()",Safe
+"for i in range(10): print(i)",Safe
+"def is_valid_email(email): return '@' in email",Safe
+"from flask import Flask; app = Flask(__name__)",Safe
+"@app.route('/'); def index(): return 'Welcome'",Safe
+"def parse_json(data): return json.loads(data)",Safe
+"def send_email(to, subject): pass",Safe
+"db_host = os.getenv('DB_HOST')",Safe
+"api_token = os.environ.get('API_TOKEN')",Safe
+"def hash_password(pwd): return bcrypt.hashpw(pwd.encode(), bcrypt.gensalt())",Safe
+"def encrypt(data): return cipher.encrypt(data)",Safe
+"def execute_cmd(cmd): subprocess.run(['ls', '-l'])",Safe
+"eval('1 + 1')",Medium Risk
+"def download_file(url): req = requests.get(url); return req.content",Safe
+"print(password)",Medium Risk
+"app.config['SECRET_KEY'] = 'dev'",Medium Risk
+"token = '1234567890abcdef'",Medium Risk
+"cursor.execute('UPDATE users SET status = 1 WHERE id = ?', (user_id,))",Safe
+"os.path.join(base_dir, user_input)",Medium Risk
+"yaml.safe_load(data)",Safe
+"xml.etree.ElementTree.parse('file.xml')",Medium Risk
+"def save_file(file): file.save(os.path.join(app.config['UPLOAD_FOLDER'], file.filename))",Medium Risk
+"def get_user_agent(): return request.headers.get('User-Agent')",Safe
+"import sys; sys.exit(0)",Safe
+"def log_error(msg): logger.error(msg)",Safe
+"try: int(user_id) except ValueError: return 'Error'",Safe
+"password = os.getenv('DB_PASSWORD')",Safe
+"def upload_image(req): if req.files: req.files['img'].save('/tmp/img.jpg')",Medium Risk
+"def process_data(data): return data.upper()",Safe
+"exec('print(\"Hello\")')",Medium Risk
+"req_data = request.get_json()",Safe
+"def delete_user(id): db.session.delete(User.query.get(id))",Safe
+"conn = sqlite3.connect('app.db')",Safe
+"def redirect_user(url): return redirect(url)",Medium Risk
+"def unsafe_redirect(url): return redirect(request.args.get('next'))",High Risk
+"def render_page(template): return render_template(template)",Safe
+"def render_unsafe_page(): return render_template_string(request.args.get('tmpl'))",High Risk

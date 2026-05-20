@@ -3,12 +3,15 @@ import os
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+
 from scanner.detector import (
     extract_metadata, 
     analyze_code_statistics, 
     scan_vulnerabilities, 
     generate_security_summary
 )
+from scanner.entry_detector import scan_entry_points, generate_attack_surface_summary
+from ml.model import train_model, predict_risk
 
 # Configure page settings
 st.set_page_config(
@@ -115,6 +118,9 @@ UPLOAD_DIR = "uploads"
 if not os.path.exists(UPLOAD_DIR):
     os.makedirs(UPLOAD_DIR)
 
+# Initialize ML Model
+train_model(force=False)
+
 def save_uploaded_file(uploaded_file):
     """Safely save uploaded file to the uploads directory."""
     try:
@@ -142,18 +148,19 @@ def main():
     # Sidebar
     with st.sidebar:
         st.markdown("<h1 style='color:#00FF41; text-shadow: 0 0 3px rgba(0,255,65,0.3);'>_CODESENTINEL_</h1>", unsafe_allow_html=True)
-        st.markdown("`SECURE_CORE_v2.0`")
+        st.markdown("`SECURE_CORE_v3.0`")
         
         st.divider()
         st.write("### [ SYSTEM_LOG ]")
         st.success("SCANNER: ONLINE")
-        st.warning("ML_CORE: STANDBY")
+        st.success("ML_CORE: ONLINE")
         st.info("AUTH: BYPASSED")
         
         st.divider()
         st.markdown("### [ COMMANDS ]")
         st.write("`> INITIALIZE_SCAN`")
-        st.write("`> ANALYZE_VULN`")
+        st.write("`> MAP_ATTACK_SURFACE`")
+        st.write("`> RUN_ML_CLASSIFIER`")
         st.write("`> GEN_REPORT`")
 
     # Main Area
@@ -172,14 +179,43 @@ def main():
             content, lines = read_file_safely(file_path)
             
             if content is not None and lines is not None:
-                # Perform Analysis
+                # -------------------------------------------------------------
+                # STATIC ANALYSIS
+                # -------------------------------------------------------------
                 metadata = extract_metadata(file_path, uploaded_file.name)
                 stats = analyze_code_statistics(lines)
                 findings = scan_vulnerabilities(lines)
-                summary_msg, summary_type, security_score = generate_security_summary(findings)
+                summary_msg, summary_type, base_score = generate_security_summary(findings)
+                
+                # -------------------------------------------------------------
+                # DAY 3: ATTACK SURFACE ANALYSIS
+                # -------------------------------------------------------------
+                entry_findings = scan_entry_points(lines)
+                attack_surface = generate_attack_surface_summary(entry_findings)
+                
+                # -------------------------------------------------------------
+                # DAY 4: ML RISK CLASSIFICATION
+                # -------------------------------------------------------------
+                ml_result = predict_risk(content)
+                ml_prediction = ml_result["prediction"]
+                ml_confidence = ml_result["confidence"]
+                
+                # Adjust final security score based on ML Prediction
+                final_score = base_score
+                if ml_prediction == "High Risk":
+                    final_score = max(0, final_score - 20)
+                elif ml_prediction == "Medium Risk":
+                    final_score = max(0, final_score - 10)
 
                 # Dashboard Layout
-                tab1, tab2, tab3, tab4 = st.tabs(["[ 01_OVERVIEW ]", "[ 02_THREATS ]", "[ 03_ANALYTICS ]", "[ 04_RAW_CODE ]"])
+                tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+                    "[ 01_OVERVIEW ]", 
+                    "[ 02_ATTACK_SURFACE ]", 
+                    "[ 03_ML_PREDICTION ]", 
+                    "[ 04_THREATS ]", 
+                    "[ 05_ANALYTICS ]", 
+                    "[ 06_RAW_CODE ]"
+                ])
                 
                 with tab1:
                     st.write("")
@@ -199,35 +235,103 @@ def main():
                             st.markdown("#### `> STATISTICS`")
                             s1, s2, s3 = st.columns(3)
                             s1.metric("LINES", stats["total_lines"])
-                            s1.metric("SCORE", f"{security_score}%")
+                            s1.metric("SECURITY_SCORE", f"{final_score}%")
                             s2.metric("FUNCS", stats["functions"])
                             s3.metric("COMM", stats["comments"])
                             
                     # Summary Alert
                     st.write("")
                     st.markdown(f"#### `> SYSTEM_SUMMARY`")
-                    if summary_type == "success":
-                        st.success(f"STATUS: SECURE | {summary_msg}")
-                    elif summary_type == "info":
-                        st.info(f"STATUS: NOTICE | {summary_msg}")
-                    elif summary_type == "warning":
-                        st.warning(f"STATUS: VULNERABLE | {summary_msg}")
+                    if final_score >= 90:
+                        st.success(f"STATUS: SECURE | Final Score: {final_score}% | No immediate threats detected.")
+                    elif final_score >= 60:
+                        st.warning(f"STATUS: MEDIUM RISK | Final Score: {final_score}% | Potential vulnerabilities found.")
                     else:
-                        st.error(f"STATUS: CRITICAL | {summary_msg}")
+                        st.error(f"STATUS: CRITICAL RISK | Final Score: {final_score}% | {summary_msg}")
 
                 with tab2:
+                    st.write("")
+                    st.markdown("#### `> ATTACK_SURFACE_ANALYSIS`")
+                    
+                    # Attack Surface Metrics
+                    col_as1, col_as2, col_as3, col_as4 = st.columns(4)
+                    col_as1.metric("ENTRY_POINTS", attack_surface["total_entry_points"])
+                    col_as2.metric("ENDPOINTS", attack_surface["total_endpoints"])
+                    col_as3.metric("RISKY_UPLOADS", attack_surface["risky_uploads"])
+                    col_as4.metric("HIGH_SEV_INPUTS", attack_surface["high_severity_inputs"])
+                    
+                    st.write("")
+                    if entry_findings:
+                        st.markdown("##### `> DETECTED_ENTRY_POINTS`")
+                        entry_df = pd.DataFrame(entry_findings)
+                        
+                        def color_severity(val):
+                            color = '#00FF41' # Default Green
+                            if val == 'High': color = '#FF3131'
+                            elif val == 'Medium': color = '#FFFF00'
+                            elif val == 'Low': color = '#00FFFF'
+                            elif val == 'Info': color = '#8A2BE2'
+                            return f'color: {color}; font-weight: bold;'
+                            
+                        st.dataframe(
+                            entry_df.style.applymap(color_severity, subset=['severity']),
+                            use_container_width=True,
+                            hide_index=True
+                        )
+                    else:
+                        st.success("`NO_ATTACKER_ENTRY_POINTS_DETECTED`")
+
+                with tab3:
+                    st.write("")
+                    st.markdown("#### `> ML_RISK_CLASSIFICATION`")
+                    
+                    col_ml1, col_ml2 = st.columns(2)
+                    with col_ml1:
+                        with st.container(border=True):
+                            st.markdown("##### `> PREDICTION_RESULTS`")
+                            
+                            pred_color = "#00FF41"
+                            if ml_prediction == "High Risk": pred_color = "#FF3131"
+                            elif ml_prediction == "Medium Risk": pred_color = "#FFFF00"
+                            
+                            st.markdown(f"<h2 style='color:{pred_color};'>{ml_prediction}</h2>", unsafe_allow_html=True)
+                            st.write(f"Confidence Score: **{ml_confidence}%**")
+                            
+                    with col_ml2:
+                        with st.container(border=True):
+                            st.markdown("##### `> CONFIDENCE_DISTRIBUTION`")
+                            scores = ml_result["all_scores"]
+                            if scores:
+                                scores_df = pd.DataFrame(list(scores.items()), columns=['Label', 'Probability'])
+                                fig_ml = px.bar(
+                                    scores_df, 
+                                    x='Probability', 
+                                    y='Label', 
+                                    orientation='h',
+                                    color='Label',
+                                    color_discrete_map={'Safe': '#00FF41', 'Medium Risk': '#FFFF00', 'High Risk': '#FF3131'}
+                                )
+                                fig_ml.update_layout(
+                                    plot_bgcolor='rgba(0,0,0,0)',
+                                    paper_bgcolor='rgba(0,0,0,0)',
+                                    font=dict(color='#00FF41', family='Courier New'),
+                                    margin=dict(l=0, r=0, t=0, b=0),
+                                    height=150
+                                )
+                                st.plotly_chart(fig_ml, use_container_width=True)
+
+                with tab4:
                     st.write("")
                     st.markdown("#### `> VULNERABILITY_LOG`")
                     if findings:
                         findings_df = pd.DataFrame(findings)
                         display_df = findings_df[['severity', 'issue', 'line', 'matched_code', 'description']]
                         
-                        # Style the severity column
                         def color_severity(val):
-                            color = '#00FF41' # Default Green
-                            if val == 'High': color = '#FF3131' # Neon Red
-                            elif val == 'Medium': color = '#FFFF00' # Neon Yellow
-                            elif val == 'Low': color = '#00FFFF' # Neon Cyan
+                            color = '#00FF41'
+                            if val == 'High': color = '#FF3131'
+                            elif val == 'Medium': color = '#FFFF00'
+                            elif val == 'Low': color = '#00FFFF'
                             return f'color: {color}; font-weight: bold; border: 1px solid {color}; padding: 2px;'
 
                         st.dataframe(
@@ -235,36 +339,25 @@ def main():
                             use_container_width=True,
                             hide_index=True
                         )
-                        
-                        # Download Feature
-                        st.write("")
-                        csv = display_df.to_csv(index=False).encode('utf-8')
-                        st.download_button(
-                            label="[ DOWNLOAD_EXPLOIT_REPORT ]",
-                            data=csv,
-                            file_name=f"report_{metadata['filename']}.csv",
-                            mime="text/csv",
-                        )
                     else:
                         st.success("`NO_VULNERABILITIES_FOUND_IN_TARGET_OBJECT`")
 
-                with tab3:
+                with tab5:
                     st.write("")
-                    if findings:
-                        findings_df = pd.DataFrame(findings)
-                        col_c1, col_c2 = st.columns(2)
-                        
-                        # Custom Plotly Theme
-                        dark_layout = dict(
-                            plot_bgcolor='rgba(0,0,0,0)',
-                            paper_bgcolor='rgba(0,0,0,0)',
-                            font=dict(color='#00FF41', family='Courier New'),
-                            xaxis=dict(gridcolor='rgba(0,255,65,0.1)', zerolinecolor='rgba(0,255,65,0.1)'),
-                            yaxis=dict(gridcolor='rgba(0,255,65,0.1)', zerolinecolor='rgba(0,255,65,0.1)')
-                        )
-                        
-                        with col_c1:
-                            st.markdown("##### `> RISK_DISTRIBUTION`")
+                    st.markdown("#### `> SECURITY_ANALYTICS`")
+                    
+                    col_c1, col_c2 = st.columns(2)
+                    dark_layout = dict(
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        font=dict(color='#00FF41', family='Courier New'),
+                        xaxis=dict(gridcolor='rgba(0,255,65,0.1)', zerolinecolor='rgba(0,255,65,0.1)'),
+                        yaxis=dict(gridcolor='rgba(0,255,65,0.1)', zerolinecolor='rgba(0,255,65,0.1)')
+                    )
+                    
+                    with col_c1:
+                        if findings:
+                            st.markdown("##### `> VULNERABILITY_DISTRIBUTION`")
                             fig_pie = px.pie(
                                 findings_df, 
                                 names='severity', 
@@ -274,22 +367,25 @@ def main():
                             )
                             fig_pie.update_layout(dark_layout)
                             st.plotly_chart(fig_pie, use_container_width=True)
+                        else:
+                            st.info("`NO_VULNERABILITY_DATA`")
                             
-                        with col_c2:
-                            st.markdown("##### `> THREAT_FREQUENCY`")
-                            fig_bar = px.bar(
-                                findings_df['issue'].value_counts().reset_index(),
-                                x='issue',
-                                y='count',
-                                labels={'issue': 'ID', 'count': 'FREQ'},
-                                color_discrete_sequence=['#00FF41']
+                    with col_c2:
+                        if entry_findings:
+                            st.markdown("##### `> ATTACK_SURFACE_DISTRIBUTION`")
+                            entry_df = pd.DataFrame(entry_findings)
+                            fig_entry = px.pie(
+                                entry_df,
+                                names='type',
+                                hole=0.6,
+                                color_discrete_sequence=px.colors.sequential.Tealgrn
                             )
-                            fig_bar.update_layout(dark_layout)
-                            st.plotly_chart(fig_bar, use_container_width=True)
-                    else:
-                        st.info("`WAITING_FOR_DATA_INPUT...`")
+                            fig_entry.update_layout(dark_layout)
+                            st.plotly_chart(fig_entry, use_container_width=True)
+                        else:
+                            st.info("`NO_ATTACK_SURFACE_DATA`")
 
-                with tab4:
+                with tab6:
                     st.write("")
                     with st.container(border=True):
                         st.markdown(f"#### `> DATA_DUMP: {metadata['filename']}`")

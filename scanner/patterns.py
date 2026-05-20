@@ -100,3 +100,59 @@ LANGUAGE_MAP = {
     ".java": "Java",
     ".txt": "Text/Unknown"
 }
+
+# ---------------------------------------------------------
+# DAY 3: ATTACKER ENTRY POINT & ATTACK SURFACE PATTERNS
+# ---------------------------------------------------------
+
+ENTRY_POINT_PATTERNS = [
+    # 1. API & Web Inputs (High Severity - Direct Control)
+    {
+        "name": "API JSON Body",
+        "regex": r"(request\.json|req\.body|json\(\))",
+        "type": "API Input",
+        "severity": "High"
+    },
+    {
+        "name": "Form Data",
+        "regex": r"(request\.form|\$_POST|req\.body)",
+        "type": "Form Data",
+        "severity": "High"
+    },
+    {
+        "name": "Query Parameters",
+        "regex": r"(request\.args|\$_GET|\$_REQUEST|req\.query)",
+        "type": "Query Parameter",
+        "severity": "Medium"
+    },
+    
+    # 2. File Uploads (High Severity - Remote Execution Risk)
+    {
+        "name": "File Upload Handler",
+        "regex": r"(request\.files|\$_FILES|upload_folder|save\(.*file\))",
+        "type": "File Upload",
+        "severity": "High"
+    },
+
+    # 3. Console/CLI Inputs (Low Severity - Local Control)
+    {
+        "name": "Console Input",
+        "regex": r"(input\(|sys\.argv|Scanner\(System\.in\))",
+        "type": "User Input",
+        "severity": "Low"
+    },
+
+    # 4. Route/Endpoint Definitions (Used for surface mapping)
+    {
+        "name": "Flask/FastAPI Route",
+        "regex": r"@(app|router|blueprint)\.(route|get|post|put|delete|patch)\(",
+        "type": "Route Handler",
+        "severity": "Info"
+    },
+    {
+        "name": "Express.js Route",
+        "regex": r"(app|router)\.(get|post|put|delete|all)\(",
+        "type": "Route Handler",
+        "severity": "Info"
+    }
+]
