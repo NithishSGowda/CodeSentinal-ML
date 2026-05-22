@@ -1,0 +1,258 @@
+@import "tailwindcss";
+
+/* ── Spline lazy-load spinner (used by SplineScene fallback) ─────────── */
+.loader {
+  display: inline-block;
+  width: 48px;
+  height: 48px;
+  border: 3px solid rgba(139, 92, 246, 0.15);
+  border-top-color: #8b5cf6;
+  border-right-color: #00f0ff;
+  border-radius: 50%;
+  animation: loader-spin 0.9s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+}
+
+@keyframes loader-spin {
+  to { transform: rotate(360deg); }
+}
+
+:root {
+  --cyan: #00f0ff;
+  --magenta: #ff007f;
+  --purple: #8b5cf6;
+  --dark: #020308;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #020308;
+  color: #f1f5f9;
+  font-family: 'Inter', sans-serif;
+  overflow-x: hidden;
+}
+
+/* ── Scrollbar ─────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: #060915; }
+::-webkit-scrollbar-thumb { background: rgba(139,92,246,0.4); border-radius: 2px; }
+
+/* ── UIverse.io — Glowing scan button ─────────────── */
+.btn-scan {
+  position: relative;
+  padding: 16px 48px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: #fff;
+  background: transparent;
+  border: 1px solid rgba(0,240,255,0.4);
+  border-radius: 50px;
+  cursor: pointer;
+  overflow: hidden;
+  transition: all 0.4s ease;
+  z-index: 1;
+}
+.btn-scan::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, #ff007f, #8b5cf6, #00f0ff);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  z-index: -1;
+  border-radius: 50px;
+}
+.btn-scan:hover::before { opacity: 1; }
+.btn-scan:hover {
+  border-color: transparent;
+  box-shadow: 0 0 40px rgba(139,92,246,0.6), 0 0 80px rgba(0,240,255,0.3);
+  transform: translateY(-2px);
+}
+.btn-scan:active { transform: scale(0.97); }
+
+/* UIverse neon-border card */
+.neon-card {
+  position: relative;
+  background: rgba(4,6,20,0.8);
+  border-radius: 20px;
+  backdrop-filter: blur(20px);
+  overflow: hidden;
+  transition: transform 0.4s cubic-bezier(0.4,0,0.2,1);
+}
+.neon-card::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 21px;
+  background: linear-gradient(135deg, rgba(0,240,255,0.3), rgba(139,92,246,0.2), rgba(255,0,127,0.3));
+  z-index: -1;
+  opacity: 0.6;
+  transition: opacity 0.3s ease;
+}
+.neon-card:hover { transform: translateY(-6px); }
+.neon-card:hover::before { opacity: 1; }
+
+/* UIverse tag badge */
+.tag-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 14px;
+  border-radius: 20px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  background: rgba(139,92,246,0.1);
+  border: 1px solid rgba(139,92,246,0.3);
+  color: #a78bfa;
+}
+.tag-badge::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #a78bfa;
+  box-shadow: 0 0 6px #a78bfa;
+  animation: blink 1.5s ease-in-out infinite;
+}
+
+/* ── Animated gradient text ──────────────────────── */
+.gradient-text {
+  background: linear-gradient(135deg, #fff 0%, #00f0ff 35%, #8b5cf6 65%, #ff007f 100%);
+  background-size: 200% 200%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: gradientShift 4s ease infinite;
+}
+
+/* ── Terminal / Mono ─────────────────────────────── */
+.mono { font-family: 'JetBrains Mono', 'Fira Code', monospace; }
+
+/* ── CTA.gallery style glowing input ────────────── */
+.cyber-input {
+  width: 100%;
+  padding: 14px 20px;
+  background: rgba(0,0,0,0.5);
+  border: 1px solid rgba(0,240,255,0.2);
+  border-radius: 12px;
+  color: #f1f5f9;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.88rem;
+  outline: none;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+.cyber-input:focus {
+  border-color: rgba(0,240,255,0.6);
+  box-shadow: 0 0 0 3px rgba(0,240,255,0.08), 0 0 20px rgba(0,240,255,0.15);
+}
+.cyber-input::placeholder { color: rgba(148,163,184,0.4); }
+
+/* ── Severity pills ──────────────────────────────── */
+.pill { display: inline-block; padding: 3px 10px; border-radius: 10px; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+.pill-high   { background: rgba(239,68,68,0.15);   color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
+.pill-medium { background: rgba(245,158,11,0.15);  color: #fbbf24; border: 1px solid rgba(245,158,11,0.3); }
+.pill-low    { background: rgba(59,130,246,0.15);  color: #60a5fa; border: 1px solid rgba(59,130,246,0.3); }
+.pill-safe   { background: rgba(16,185,129,0.15);  color: #34d399; border: 1px solid rgba(16,185,129,0.3); }
+
+/* ── Risk ring ───────────────────────────────────── */
+.risk-ring { width: 80px; height: 80px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: 900; flex-shrink: 0; }
+.risk-low  { background: rgba(16,185,129,0.1); color: #34d399; border: 2px solid #34d399; box-shadow: 0 0 20px rgba(52,211,153,0.3); }
+.risk-med  { background: rgba(245,158,11,0.1);  color: #fbbf24; border: 2px solid #fbbf24; box-shadow: 0 0 20px rgba(251,191,36,0.3); }
+.risk-high { background: rgba(239,68,68,0.1);   color: #f87171; border: 2px solid #f87171; box-shadow: 0 0 20px rgba(248,113,113,0.3); }
+
+/* ── Loader bar ──────────────────────────────────── */
+.loader-bar { height: 100%; border-radius: 3px; background: linear-gradient(90deg, #00f0ff, #8b5cf6, #ff007f); }
+
+/* ── Animations ──────────────────────────────────── */
+@keyframes gradientShift {
+  0%, 100% { background-position: 0% 50%; }
+  50%       { background-position: 100% 50%; }
+}
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.2; }
+}
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(32px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes scanLine {
+  0%   { transform: translateY(-10px) translateZ(0); }
+  100% { transform: translateY(580px) translateZ(0); }
+}
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 0.55;
+    transform: scale(1) translateZ(0);
+  }
+  50% {
+    opacity: 0.95;
+    transform: scale(1.06) translateZ(0);
+  }
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0) translateZ(0); }
+  50%       { transform: translateY(-12px) translateZ(0); }
+}
+@keyframes spin-slow {
+  to { transform: rotate(360deg) translateZ(0); }
+}
+@keyframes orbit {
+  to { transform: rotate(360deg) translateX(80px) rotate(-360deg) translateZ(0); }
+}
+
+.pulse-orb {
+  will-change: transform, opacity;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+@keyframes typewriter {
+  from { width: 0; }
+  to   { width: 100%; }
+}
+@keyframes cursor-blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+@keyframes grid-fade {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.animate-fadeUp     { animation: fadeUp 0.8s ease forwards; }
+.animate-fadeIn     { animation: fadeIn 0.6s ease forwards; }
+
+/* ── Grid pattern background ─────────────────────── */
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(0,240,255,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,240,255,0.04) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+/* ── Typing cursor ───────────────────────────────── */
+.cursor::after {
+  content: '|';
+  animation: cursor-blink 0.8s step-end infinite;
+  color: #00f0ff;
+}
+
+/* ── Data table ──────────────────────────────────── */
+.data-table { width: 100%; border-collapse: collapse; font-size: 0.83rem; }
+.data-table th { font-family: 'JetBrains Mono', monospace; font-size: 0.62rem; letter-spacing: 2px; text-transform: uppercase; color: #00f0ff; opacity: 0.55; padding: 10px 14px; text-align: left; border-bottom: 1px solid rgba(0,240,255,0.08); }
+.data-table td { padding: 11px 14px; color: #94a3b8; border-bottom: 1px solid rgba(255,255,255,0.04); vertical-align: top; }
+.data-table tr:hover td { background: rgba(0,240,255,0.025); }
+
+/* ── Code snippet ────────────────────────────────── */
+.code-snip { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: #a78bfa; background: rgba(0,0,0,0.4); padding: 3px 8px; border-radius: 6px; max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
