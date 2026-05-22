@@ -9,14 +9,56 @@ code,label
 "query = f'SELECT * FROM data WHERE name = {name}'",High Risk
 "cursor.execute('DELETE FROM users WHERE id = {}'.format(user_id))",High Risk
 "import os; os.system('rm -rf /')",High Risk
+"def login(user, pw): return f'SELECT * FROM users WHERE user={user} AND pw={pw}'",High Risk
+"file = open(request.args.get('file'), 'r')",High Risk
+"def unsafe_redirect(url): return redirect(request.args.get('next'))",High Risk
+"def render_unsafe_page(): return render_template_string(request.args.get('tmpl'))",High Risk
+"result = eval(request.form.get('expr'))",High Risk
+"cmd = request.json.get('command'); os.system(cmd)",High Risk
+"subprocess.call(request.args['cmd'], shell=True)",High Risk
+"exec(request.form['code'])",High Risk
+"data = pickle.loads(base64.b64decode(request.cookies.get('session')))",High Risk
+"db.execute('SELECT * FROM accounts WHERE username=' + username + ' AND password=' + password)",High Risk
+"cursor.execute(f'UPDATE users SET role=admin WHERE id={user_id}')",High Risk
+"open(request.args.get('path')).read()",High Risk
+"shutil.rmtree(user_path)",High Risk
+"os.remove(request.form.get('file'))",High Risk
+"template = request.args.get('t'); render_template_string(template)",High Risk
+"deserialize(request.body)",High Risk
+"xmlrpc_client = xmlrpc.client.ServerProxy(user_url)",High Risk
+"__import__(user_module)",High Risk
+"getattr(obj, request.args.get('method'))()",High Risk
+"input_code = input('Enter code: '); exec(input_code)",High Risk
 "password = 'admin123'",Medium Risk
 "api_key = 'AIzaSyAXXXXXXX'",Medium Risk
 "SECRET_KEY = 'super_secret_key_123'",Medium Risk
 "def test(): TODO: add auth later",Medium Risk
 "print('DEBUG: user logged in as admin')",Medium Risk
 "def get_data(req): return req.query.id",Medium Risk
-"file = open(request.args.get('file'), 'r')",High Risk
-"def login(user, pw): return f'SELECT * FROM users WHERE user={user} AND pw={pw}'",High Risk
+"app.config['SECRET_KEY'] = 'dev'",Medium Risk
+"token = '1234567890abcdef'",Medium Risk
+"os.path.join(base_dir, user_input)",Medium Risk
+"xml.etree.ElementTree.parse('file.xml')",Medium Risk
+"def save_file(file): file.save(os.path.join(app.config['UPLOAD_FOLDER'], file.filename))",Medium Risk
+"eval('1 + 1')",Medium Risk
+"print(password)",Medium Risk
+"exec('print(\"Hello\")')",Medium Risk
+"def redirect_user(url): return redirect(url)",Medium Risk
+"access_token = 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9'",Medium Risk
+"private_key = '-----BEGIN RSA PRIVATE KEY-----'",Medium Risk
+"DB_HOST = 'localhost'; DB_PASS = 'root'",Medium Risk
+"# FIXME: disable debug mode before deployment",Medium Risk
+"# TEMP: bypass auth for testing",Medium Risk
+"# TODO: validate user input",Medium Risk
+"import logging; logging.basicConfig(level=logging.DEBUG)",Medium Risk
+"app.run(debug=True)",Medium Risk
+"ALLOWED_HOSTS = ['*']",Medium Risk
+"cors_origin = '*'",Medium Risk
+"verify=False",Medium Risk
+"ssl._create_unverified_context()",Medium Risk
+"hashlib.md5(password.encode()).hexdigest()",Medium Risk
+"base64.b64decode(token)",Medium Risk
+"random.randint(0, 9999)",Medium Risk
 "def safe_get_user(id): return db.query('SELECT * FROM users WHERE id = ?', (id,))",Safe
 "def hello(): print('Hello World')",Safe
 "class User: def __init__(self, name): self.name = name",Safe
@@ -24,7 +66,7 @@ code,label
 "def calculate_tax(amount): return amount * 0.2",Safe
 "def get_time(): return datetime.now()",Safe
 "for i in range(10): print(i)",Safe
-"def is_valid_email(email): return '@' in email",Safe
+"def is_valid_email(email): return '@' in email and '.' in email",Safe
 "from flask import Flask; app = Flask(__name__)",Safe
 "@app.route('/'); def index(): return 'Welcome'",Safe
 "def parse_json(data): return json.loads(data)",Safe
@@ -34,28 +76,32 @@ code,label
 "def hash_password(pwd): return bcrypt.hashpw(pwd.encode(), bcrypt.gensalt())",Safe
 "def encrypt(data): return cipher.encrypt(data)",Safe
 "def execute_cmd(cmd): subprocess.run(['ls', '-l'])",Safe
-"eval('1 + 1')",Medium Risk
 "def download_file(url): req = requests.get(url); return req.content",Safe
-"print(password)",Medium Risk
-"app.config['SECRET_KEY'] = 'dev'",Medium Risk
-"token = '1234567890abcdef'",Medium Risk
 "cursor.execute('UPDATE users SET status = 1 WHERE id = ?', (user_id,))",Safe
-"os.path.join(base_dir, user_input)",Medium Risk
 "yaml.safe_load(data)",Safe
-"xml.etree.ElementTree.parse('file.xml')",Medium Risk
-"def save_file(file): file.save(os.path.join(app.config['UPLOAD_FOLDER'], file.filename))",Medium Risk
 "def get_user_agent(): return request.headers.get('User-Agent')",Safe
 "import sys; sys.exit(0)",Safe
 "def log_error(msg): logger.error(msg)",Safe
 "try: int(user_id) except ValueError: return 'Error'",Safe
 "password = os.getenv('DB_PASSWORD')",Safe
-"def upload_image(req): if req.files: req.files['img'].save('/tmp/img.jpg')",Medium Risk
-"def process_data(data): return data.upper()",Safe
-"exec('print(\"Hello\")')",Medium Risk
 "req_data = request.get_json()",Safe
 "def delete_user(id): db.session.delete(User.query.get(id))",Safe
 "conn = sqlite3.connect('app.db')",Safe
-"def redirect_user(url): return redirect(url)",Medium Risk
-"def unsafe_redirect(url): return redirect(request.args.get('next'))",High Risk
 "def render_page(template): return render_template(template)",Safe
-"def render_unsafe_page(): return render_template_string(request.args.get('tmpl'))",High Risk
+"def process_data(data): return data.upper()",Safe
+"SECRET_KEY = os.environ.get('SECRET_KEY', os.urandom(24).hex())",Safe
+"cursor.execute('SELECT * FROM users WHERE email = ?', (email,))",Safe
+"import re; pattern = re.compile(r'^[a-zA-Z0-9]+$')",Safe
+"if not re.match(r'^[a-z0-9]+$', username): raise ValueError('Invalid')",Safe
+"from functools import wraps",Safe
+"@login_required",Safe
+"return jsonify({'status': 'ok'})",Safe
+"logging.info('User logged in: %s', user_id)",Safe
+"session['user_id'] = user.id",Safe
+"token = secrets.token_hex(32)",Safe
+"from cryptography.fernet import Fernet; f = Fernet(key)",Safe
+"def check_permission(user, action): return user.role in ALLOWED_ROLES[action]",Safe
+"result = subprocess.run(['git', 'status'], shell=False, capture_output=True)",Safe
+"allowed_exts = {'.png', '.jpg', '.gif'}; assert ext in allowed_exts",Safe
+"with open('config.json') as f: config = json.load(f)",Safe
+"hmac.compare_digest(token_a, token_b)",Safe

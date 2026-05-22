@@ -1,158 +1,292 @@
 """
-This module contains patterns and regex rules used for static analysis.
+scanner/patterns.py
+--------------------
+Central Pattern Registry for Static Analysis
+
+Contains all regex patterns used for:
+  1. Vulnerability detection
+  2. Hardcoded secret detection
+  3. Attacker entry-point detection
 """
 
-# Dictionary of vulnerability patterns for detection
-# Each pattern includes: name, regex, severity, and description
+import re
+
+# =======================================================================
+# 1. VULNERABILITY PATTERNS
+# =======================================================================
+# Each entry is a dict with: name, regex, severity, description
+# Severity levels: "High" | "Medium" | "Low"
+
 VULNERABILITY_PATTERNS = [
-    # 1. Dangerous Code Execution Functions (High Severity)
+
+    # ── Dangerous Code Execution ─────────────────────────────────────────
     {
         "name": "Dangerous Execution (eval)",
-        "regex": r"eval\(",
+        "regex": r"\beval\s*\(",
         "severity": "High",
-        "description": "The eval() function can execute arbitrary code strings, leading to Remote Code Execution (RCE) vulnerabilities."
+        "description": "eval() executes arbitrary code strings — a direct path to Remote Code Execution."
     },
     {
         "name": "Dangerous Execution (exec)",
-        "regex": r"exec\(",
+        "regex": r"\bexec\s*\(",
         "severity": "High",
-        "description": "The exec() function executes dynamically created Python code, which is highly risky if input is untrusted."
+        "description": "exec() runs dynamically created Python code. Never use with user-controlled data."
     },
     {
         "name": "System Command Execution (os.system)",
-        "regex": r"os\.system\(",
+        "regex": r"os\.system\s*\(",
         "severity": "High",
-        "description": "Using os.system() to run shell commands is prone to command injection vulnerabilities."
+        "description": "os.system() passes a string to the OS shell — vulnerable to command injection."
     },
     {
         "name": "Subprocess Execution",
-        "regex": r"subprocess\.(Popen|call|run|check_output|getoutput)\(",
+        "regex": r"subprocess\.(Popen|call|run|check_output|getoutput)\s*\(",
         "severity": "High",
-        "description": "Spawning subprocesses with shell=True or untrusted input can lead to system-level exploits."
+        "description": "Subprocess spawning with shell=True or user input leads to command injection."
     },
     {
         "name": "Insecure Deserialization (pickle)",
-        "regex": r"pickle\.loads\(",
+        "regex": r"pickle\.loads\s*\(",
         "severity": "High",
-        "description": "Deserializing untrusted data with pickle.loads() can execute arbitrary code during the process."
+        "description": "pickle.loads() on untrusted data can execute arbitrary code on load."
+    },
+    {
+        "name": "Insecure Deserialization (yaml)",
+        "regex": r"yaml\.load\s*\(",
+        "severity": "High",
+        "description": "yaml.load() without Loader=yaml.SafeLoader can deserialise arbitrary Python objects."
+    },
+    {
+        "name": "Insecure Template Rendering",
+        "regex": r"render_template_string\s*\(",
+        "severity": "High",
+        "description": "render_template_string() with user input causes Server-Side Template Injection (SSTI)."
+    },
+    {
+        "name": "Open Redirect",
+        "regex": r"redirect\s*\(\s*request\.(args|form|json|values)",
+        "severity": "High",
+        "description": "Redirecting to a user-supplied URL enables phishing and open-redirect attacks."
     },
 
-    # 2. Hardcoded Secrets (Medium Severity)
-    {
-        "name": "Hardcoded Password",
-        "regex": r"(password|passwd|pwd)\s*=\s*['\"][^'\"]+['\"]",
-        "severity": "Medium",
-        "description": "Storing passwords in plain text within source code is a significant security risk."
-    },
-    {
-        "name": "Hardcoded API Key",
-        "regex": r"(api_key|apikey|api-key)\s*=\s*['\"][^'\"]+['\"]",
-        "severity": "Medium",
-        "description": "Hardcoded API keys can be easily extracted and used by unauthorized parties."
-    },
-    {
-        "name": "Hardcoded Token",
-        "regex": r"(token|auth_token|access_token)\s*=\s*['\"][^'\"]+['\"]",
-        "severity": "Medium",
-        "description": "Authentication tokens should never be stored directly in the source code."
-    },
-    {
-        "name": "Hardcoded Secret",
-        "regex": r"(secret|secret_key|private_key)\s*=\s*['\"][^'\"]+['\"]",
-        "severity": "Medium",
-        "description": "Hardcoded secrets expose sensitive credentials to anyone with access to the code."
-    },
-
-    # 3. Unsafe SQL Construction (Medium/High Severity)
+    # ── SQL Injection ─────────────────────────────────────────────────────
     {
         "name": "SQL Injection (Concatenation)",
-        "regex": r"(SELECT|INSERT|UPDATE|DELETE).*\+.*",
+        "regex": r"(SELECT|INSERT|UPDATE|DELETE|FROM|WHERE).*[\+].*",
         "severity": "High",
-        "description": "Building SQL queries using string concatenation is a primary cause of SQL Injection."
+        "description": "String-concatenation in SQL queries enables injection — use parameterised queries."
     },
     {
         "name": "SQL Injection (f-string)",
-        "regex": r"f['\"].*(SELECT|INSERT|UPDATE|DELETE).*{.*}",
+        "regex": r"f['\"].*(SELECT|INSERT|UPDATE|DELETE).*\{",
         "severity": "High",
-        "description": "Using f-strings to insert variables directly into SQL queries is unsafe."
+        "description": "f-strings in SQL are not sanitised — use parameterised queries instead."
     },
     {
         "name": "SQL Injection (.format)",
-        "regex": r"['\"].*(SELECT|INSERT|UPDATE|DELETE).*['\"].*\.format\(",
+        "regex": r"['\"].*(SELECT|INSERT|UPDATE|DELETE).*['\"].*\.format\s*\(",
         "severity": "High",
-        "description": "Using .format() to build SQL queries is vulnerable to injection attacks."
+        "description": ".format() in SQL is vulnerable to injection. Use ? / %s placeholders."
     },
 
-    # 4. Suspicious Keywords (Low Severity)
+    # ── Hardcoded Secrets ─────────────────────────────────────────────────
+    {
+        "name": "Hardcoded Password",
+        "regex": r"(password|passwd|pwd)\s*=\s*['\"][^'\"]{3,}['\"]",
+        "severity": "Medium",
+        "description": "Plain-text passwords in source code can be trivially extracted by anyone with file access."
+    },
+    {
+        "name": "Hardcoded API Key",
+        "regex": r"(api_key|apikey|api[-_]key)\s*=\s*['\"][^'\"]{6,}['\"]",
+        "severity": "Medium",
+        "description": "Hardcoded API keys grant access to external services and billing accounts."
+    },
+    {
+        "name": "Hardcoded Token",
+        "regex": r"(token|auth_token|access_token|bearer)\s*=\s*['\"][^'\"]{6,}['\"]",
+        "severity": "Medium",
+        "description": "Authentication tokens in code enable session hijacking and impersonation."
+    },
+    {
+        "name": "Hardcoded Secret",
+        "regex": r"(secret|secret_key|private_key)\s*=\s*['\"][^'\"]{3,}['\"]",
+        "severity": "Medium",
+        "description": "Exposed secret keys allow session forgery and cryptographic attacks."
+    },
+
+    # ── Unsafe Practices ──────────────────────────────────────────────────
+    {
+        "name": "SSL Verification Disabled",
+        "regex": r"verify\s*=\s*False",
+        "severity": "Medium",
+        "description": "Disabling SSL verification allows man-in-the-middle attacks on HTTPS connections."
+    },
+    {
+        "name": "Weak Hashing (MD5)",
+        "regex": r"hashlib\.md5\s*\(",
+        "severity": "Medium",
+        "description": "MD5 is cryptographically broken. Use SHA-256 or bcrypt for passwords."
+    },
+    {
+        "name": "Weak Hashing (SHA1)",
+        "regex": r"hashlib\.sha1\s*\(",
+        "severity": "Medium",
+        "description": "SHA-1 is deprecated for security use. Use SHA-256 or stronger."
+    },
+    {
+        "name": "Insecure Random (random module)",
+        "regex": r"\brandom\.(randint|random|choice|shuffle)\s*\(",
+        "severity": "Low",
+        "description": "The 'random' module is not cryptographically secure. Use 'secrets' for tokens/IDs."
+    },
+    {
+        "name": "Debug Mode Enabled",
+        "regex": r"(app\.run\s*\(.*debug\s*=\s*True|DEBUG\s*=\s*True)",
+        "severity": "Medium",
+        "description": "Debug mode exposes stack traces and an interactive debugger to anyone on the network."
+    },
+    {
+        "name": "Wildcard CORS / Allowed Hosts",
+        "regex": r"(ALLOWED_HOSTS|cors.*origin|Access-Control-Allow-Origin)\s*[=:]\s*['\"]?\*",
+        "severity": "Medium",
+        "description": "Wildcard CORS allows any origin to make cross-site requests to your API."
+    },
+
+    # ── Suspicious Developer Notes ─────────────────────────────────────────
     {
         "name": "Suspicious Keyword",
-        "regex": r"(TODO|FIXME|DEBUG|TEMP)",
+        "regex": r"\b(TODO|FIXME|DEBUG|TEMP|HACK|XXX)\b",
         "severity": "Low",
-        "description": "Developer comments like TODO or DEBUG may indicate unfinished security tasks or exposed debug paths."
-    }
+        "description": "Dev markers like TODO/FIXME/DEBUG often indicate unfinished security tasks."
+    },
 ]
 
-# Mapping of file extensions to programming languages
-LANGUAGE_MAP = {
-    ".py": "Python",
-    ".js": "JavaScript",
-    ".php": "PHP",
-    ".java": "Java",
-    ".txt": "Text/Unknown"
-}
 
-# ---------------------------------------------------------
-# DAY 3: ATTACKER ENTRY POINT & ATTACK SURFACE PATTERNS
-# ---------------------------------------------------------
+# =======================================================================
+# 2. ENTRY POINT PATTERNS
+# =======================================================================
+# Where attacker-controlled data enters the application.
 
 ENTRY_POINT_PATTERNS = [
-    # 1. API & Web Inputs (High Severity - Direct Control)
+
+    # Web framework inputs
     {
         "name": "API JSON Body",
-        "regex": r"(request\.json|req\.body|json\(\))",
+        "regex": r"(request\.json|request\.get_json|req\.body|json\(\))",
         "type": "API Input",
         "severity": "High"
     },
     {
         "name": "Form Data",
-        "regex": r"(request\.form|\$_POST|req\.body)",
+        "regex": r"(request\.form|request\.values|\$_POST|req\.body)",
         "type": "Form Data",
         "severity": "High"
     },
     {
         "name": "Query Parameters",
-        "regex": r"(request\.args|\$_GET|\$_REQUEST|req\.query)",
+        "regex": r"(request\.args|request\.params|\$_GET|\$_REQUEST|req\.query)",
         "type": "Query Parameter",
         "severity": "Medium"
     },
-    
-    # 2. File Uploads (High Severity - Remote Execution Risk)
     {
         "name": "File Upload Handler",
-        "regex": r"(request\.files|\$_FILES|upload_folder|save\(.*file\))",
+        "regex": r"(request\.files|\$_FILES|upload_folder|\.save\s*\()",
         "type": "File Upload",
         "severity": "High"
     },
-
-    # 3. Console/CLI Inputs (Low Severity - Local Control)
+    {
+        "name": "HTTP Headers",
+        "regex": r"request\.(headers|cookies)",
+        "type": "HTTP Header/Cookie",
+        "severity": "Medium"
+    },
     {
         "name": "Console Input",
-        "regex": r"(input\(|sys\.argv|Scanner\(System\.in\))",
+        "regex": r"(\binput\s*\(|sys\.argv|Scanner\s*\(\s*System\.in\s*\))",
         "type": "User Input",
         "severity": "Low"
     },
 
-    # 4. Route/Endpoint Definitions (Used for surface mapping)
+    # Route / endpoint definitions (used for attack surface mapping)
     {
         "name": "Flask/FastAPI Route",
-        "regex": r"@(app|router|blueprint)\.(route|get|post|put|delete|patch)\(",
+        "regex": r"@(app|router|blueprint|api)\.(route|get|post|put|delete|patch)\s*\(",
         "type": "Route Handler",
         "severity": "Info"
     },
     {
         "name": "Express.js Route",
-        "regex": r"(app|router)\.(get|post|put|delete|all)\(",
+        "regex": r"(app|router)\.(get|post|put|delete|all)\s*\(",
         "type": "Route Handler",
         "severity": "Info"
-    }
+    },
+    {
+        "name": "PHP Superglobal Input",
+        "regex": r"\$_(GET|POST|REQUEST|FILES|COOKIE|SERVER)\[",
+        "type": "PHP Input",
+        "severity": "High"
+    },
+]
+
+
+# =======================================================================
+# 3. LANGUAGE MAP
+# =======================================================================
+
+LANGUAGE_MAP = {
+    ".py":   "Python",
+    ".js":   "JavaScript",
+    ".php":  "PHP",
+    ".java": "Java",
+    ".txt":  "Text/Unknown",
+}
+
+
+# =======================================================================
+# 4. VIBE CODING RISK INDICATORS
+# =======================================================================
+# Patterns that suggest "vibe coding" — rushing without security thinking.
+
+VIBE_CODING_PATTERNS = [
+    # No input validation
+    {"name": "No Input Validation (direct use)",
+     "regex": r"(eval|exec|os\.system)\s*\(\s*\w*(input|request|req|args|form|json|body)\w*",
+     "weight": 15},
+    # Hardcoded credentials
+    {"name": "Hardcoded Credential",
+     "regex": r"(password|secret|api_key|token)\s*=\s*['\"][^'\"]{3,}['\"]",
+     "weight": 10},
+    # Bare except (swallowing errors silently)
+    {"name": "Bare Except Clause",
+     "regex": r"except\s*:",
+     "weight": 5},
+    # Shell=True
+    {"name": "Shell=True in Subprocess",
+     "regex": r"shell\s*=\s*True",
+     "weight": 12},
+    # Debug left in code
+    {"name": "Debug Code in Production",
+     "regex": r"(print\s*\(.*password|debug\s*=\s*True|console\.log.*token)",
+     "weight": 7},
+    # SQL concatenation
+    {"name": "SQL Concatenation",
+     "regex": r"(SELECT|INSERT|UPDATE|DELETE).*\+",
+     "weight": 15},
+    # Disable SSL
+    {"name": "SSL Disabled",
+     "regex": r"verify\s*=\s*False",
+     "weight": 10},
+    # Wildcard CORS
+    {"name": "Wildcard CORS",
+     "regex": r"Access-Control-Allow-Origin.*\*",
+     "weight": 8},
+    # Using MD5 for passwords
+    {"name": "MD5 for Passwords",
+     "regex": r"md5\s*\(.*password",
+     "weight": 12},
+    # TODO auth bypass
+    {"name": "Auth Bypass Comment",
+     "regex": r"(#|//|/\*).*?(bypass|skip|remove).*?(auth|login|check)",
+     "weight": 8},
 ]
