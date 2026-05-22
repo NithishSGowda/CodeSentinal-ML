@@ -73,10 +73,65 @@ SMTP_PORT     = int(os.environ.get('SMTP_PORT', '587'))
 SMTP_EMAIL    = os.environ.get('SMTP_EMAIL', '')       # e.g. yourname@gmail.com
 SMTP_PASSWORD = os.environ.get('SMTP_PASSWORD', '')    # Gmail App Password
 
-OTP_STORE = {}   # { email: { otp, expires_at, name } }
-USER_STORE = {}  # { email: { name, token } }  — in-memory, resets on restart
+OTP_STORE = {}   # { email: { otp, expires_at, name } }  — always in-memory (short TTL)
+USER_STORE = {}  # fallback in-memory store when MongoDB is unavailable
 
 OTP_TTL_SECONDS = 300   # 5 minutes
+
+# ── MongoDB Atlas Connection ──────────────────────────────────────────────────
+MONGO_URI = os.environ.get(
+    'MONGO_URI',
+    'mongodb+srv://nithishgowda1906_db_user:58PChYSacV82eDD7@cluster0.xukkji1.mongodb.net/'
+)
+_mongo_client = None
+_users_col     = None   # MongoDB collection handle (None = use fallback)
+
+def _init_mongo():
+    """Connect to MongoDB Atlas. Falls back to in-memory USER_STORE on failure."""
+    global _mongo_client, _users_col
+    if not MONGO_URI:
+        print('[DB] No MONGO_URI set — using in-memory USER_STORE.')
+        return
+    try:
+        import pymongo
+        _mongo_client = pymongo.MongoClient(MONGO_URI, serverSelectionTimeoutMS=6000)
+        _mongo_client.admin.command('ping')
+        db = _mongo_client['codesentinel']
+        _users_col = db['users']
+        _users_col.create_index('email', unique=True)
+        print('[DB] MongoDB Atlas connected — users are now persistent!')
+    except Exception as exc:
+        print(f'[DB] MongoDB unavailable ({exc}) — falling back to in-memory store.')
+        _mongo_client = None
+        _users_col = None
+
+_init_mongo()
+
+# ── Thin DB helpers (works whether MongoDB is live or not) ────────────────────
+def _db_get_user(email: str) -> dict | None:
+    if _users_col is not None:
+        doc = _users_col.find_one({'email': email}, {'_id': 0})
+        return dict(doc) if doc else None
+    return USER_STORE.get(email)
+
+def _db_set_user(email: str, data: dict):
+    if _users_col is not None:
+        _users_col.update_one({'email': email}, {'$set': data}, upsert=True)
+    else:
+        USER_STORE[email] = data
+
+def _db_update_user(email: str, fields: dict):
+    if _users_col is not None:
+        _users_col.update_one({'email': email}, {'$set': fields})
+    else:
+        if email in USER_STORE:
+            USER_STORE[email].update(fields)
+
+def _db_delete_user(email: str):
+    if _users_col is not None:
+        _users_col.delete_one({'email': email})
+    else:
+        USER_STORE.pop(email, None)
 
 def _generate_otp(length: int = 6) -> str:
     return ''.join(random.choices(string.digits, k=length))
@@ -319,9 +374,9 @@ def auth_verify_otp():
     name = record.get('name', '')
     del OTP_STORE[email]
 
-    # Generate a simple session token (not a real JWT — no database)
+    # Generate a simple session token and persist to MongoDB (or in-memory fallback)
     token = ''.join(random.choices(string.ascii_letters + string.digits, k=48))
-    USER_STORE[email] = {'name': name, 'token': token, 'email': email}
+    _db_set_user(email, {'email': email, 'name': name, 'token': token})
 
     # Send welcome email for new registrations (non-blocking background thread)
     if mode == 'register':
@@ -344,8 +399,7 @@ def auth_verify_otp():
 def auth_logout():
     data  = request.get_json(silent=True) or {}
     email = (data.get('email') or '').strip().lower()
-    if email in USER_STORE:
-        del USER_STORE[email]
+    _db_delete_user(email)
     return jsonify({'success': True})
 
 
@@ -360,11 +414,11 @@ def auth_update_name():
     if not email or not token or not name:
         return jsonify({'error': 'Email, token, and name are required.'}), 400
 
-    record = USER_STORE.get(email)
+    record = _db_get_user(email)
     if not record or record.get('token') != token:
         return jsonify({'error': 'Unauthorized.'}), 401
 
-    USER_STORE[email]['name'] = name
+    _db_update_user(email, {'name': name})
     print(f'[AUTH] Name updated for {email} -> {name}')
     return jsonify({'success': True, 'user': {'email': email, 'name': name}})
 
@@ -379,13 +433,12 @@ def auth_delete_account():
     if not email or not token:
         return jsonify({'error': 'Email and token are required.'}), 400
 
-    record = USER_STORE.get(email)
+    record = _db_get_user(email)
     if not record or record.get('token') != token:
         return jsonify({'error': 'Unauthorized — invalid session.'}), 401
 
-    del USER_STORE[email]
-    # Also purge any lingering OTP for that email
-    OTP_STORE.pop(email, None)
+    _db_delete_user(email)
+    OTP_STORE.pop(email, None)   # also purge any lingering OTP
     print(f'[AUTH] Account deleted: {email}')
     return jsonify({'success': True})
 
