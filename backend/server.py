@@ -22,6 +22,11 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from flask import Flask, render_template, request, jsonify, send_from_directory
 from flask_cors import CORS
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
 
 # ── Force IPv4 for all outbound connections ───────────────────────────────────
 # Render's free tier has no IPv6 route — this prevents "Network is unreachable"
@@ -95,7 +100,7 @@ OTP_TTL_SECONDS = 300   # 5 minutes
 # ── MongoDB Atlas Connection ──────────────────────────────────────────────────
 MONGO_URI = os.environ.get(
     'MONGO_URI',
-    'mongodb+srv://nithishaws2005_db_user:CodeSentinel@codesentinel-ml.1pdqbkm.mongodb.net/'
+    'mongodb+srv://techtonic202005_db_user:Nitz%402005@cluster0.ivlbfop.mongodb.net/codesentinel?appName=Cluster0'
 )
 _mongo_client = None
 _users_col     = None   # MongoDB collection handle (None = use fallback)
@@ -111,7 +116,7 @@ def _init_mongo():
         _mongo_client = pymongo.MongoClient(
             MONGO_URI,
             serverSelectionTimeoutMS=6000,
-            tlsCAFile=certifi.where()
+            tls=True
         )
         _mongo_client.admin.command('ping')
         db = _mongo_client['codesentinel']
