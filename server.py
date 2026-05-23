@@ -16,11 +16,19 @@ import requests
 import random
 import string
 import smtplib
+import socket
 import time
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from flask import Flask, render_template, request, jsonify, send_from_directory
 from flask_cors import CORS
+
+# ── Force IPv4 for all outbound connections ───────────────────────────────────
+# Render's free tier has no IPv6 route — this prevents "Network is unreachable"
+_orig_getaddrinfo = socket.getaddrinfo
+socket.getaddrinfo = lambda h, p, f=0, t=0, pr=0, fl=0: _orig_getaddrinfo(
+    h, p, socket.AF_INET, t, pr, fl
+)
 
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
