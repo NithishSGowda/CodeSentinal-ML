@@ -95,7 +95,7 @@ OTP_TTL_SECONDS = 300   # 5 minutes
 # ── MongoDB Atlas Connection ──────────────────────────────────────────────────
 MONGO_URI = os.environ.get(
     'MONGO_URI',
-    'mongodb+srv://nithishaws2005_db_user:CodeSentinel@codesentinel-ml.1pdqbkm.mongodb.net/?appName=CodeSentinel-ML'
+    'mongodb+srv://nithishaws2005_db_user:CodeSentinel@codesentinel-ml.1pdqbkm.mongodb.net/'
 )
 _mongo_client = None
 _users_col     = None   # MongoDB collection handle (None = use fallback)
