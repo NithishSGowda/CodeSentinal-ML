@@ -297,7 +297,7 @@ def _send_welcome_email(to_email: str, name: str) -> bool:
         '================================================\n\n'
         'Welcome aboard, ' + greeting + '.\n\n'
         'Identity confirmed. Your secure operator profile is now active.\n'
-        'SOC terminal: http://localhost:3000\n\n'
+        f'SOC terminal: {os.environ.get("FRONTEND_URL", "http://localhost:3000")}\n\n'
         'Capabilities:\n'
         '  - Static vulnerability scanning (50+ patterns)\n'
         '  - Attack surface & chain correlation\n'
@@ -350,7 +350,8 @@ def _send_welcome_email(to_email: str, name: str) -> bool:
         h.append('<div style="padding:5px 0;font-size:12px;color:#94a3b8;">&#8594; ' + cap + '</div>')
     h.append('</div>')
     h.append('<div style="text-align:center;margin:24px 0 8px;">')
-    h.append('<a href="http://localhost:3000" style="display:inline-block;border:1px solid rgba(0,240,255,0.4);color:#fff;font-size:11px;font-weight:900;letter-spacing:3px;text-transform:uppercase;text-decoration:none;padding:14px 36px;border-radius:50px;">ENTER THE SYSTEM &#8250;</a>')
+    _frontend = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
+    h.append(f'<a href="{_frontend}" style="display:inline-block;border:1px solid rgba(0,240,255,0.4);color:#fff;font-size:11px;font-weight:900;letter-spacing:3px;text-transform:uppercase;text-decoration:none;padding:14px 36px;border-radius:50px;">ENTER THE SYSTEM &#8250;</a>')
     h.append('</div></td></tr>')
     h.append('<tr><td style="padding:16px 44px 24px;text-align:center;border-top:1px solid rgba(255,255,255,0.04);">')
     h.append('<p style="margin:0;font-size:9px;letter-spacing:3px;text-transform:uppercase;color:rgba(148,163,184,0.25);">CODESENTINEL ML &middot; SECURITY OPERATIONS CENTER</p>')
@@ -674,7 +675,8 @@ def scan_project(project_path):
 @app.route('/')
 def index():
     from flask import redirect
-    return redirect('http://localhost:3000', code=302)
+    frontend_url = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
+    return redirect(frontend_url, code=302)
 
 
 @app.route('/api/scan/path', methods=['POST'])
