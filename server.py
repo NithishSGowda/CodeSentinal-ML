@@ -98,8 +98,12 @@ def _init_mongo():
         print('[DB] No MONGO_URI set — using in-memory USER_STORE.')
         return
     try:
-        import pymongo
-        _mongo_client = pymongo.MongoClient(MONGO_URI, serverSelectionTimeoutMS=6000)
+        import pymongo, certifi
+        _mongo_client = pymongo.MongoClient(
+            MONGO_URI,
+            serverSelectionTimeoutMS=6000,
+            tlsCAFile=certifi.where()
+        )
         _mongo_client.admin.command('ping')
         db = _mongo_client['codesentinel']
         _users_col = db['users']
@@ -216,9 +220,8 @@ If you did not request this, ignore this message.
         msg.attach(MIMEText(plain_body, 'plain'))
         msg.attach(MIMEText(html_body, 'html'))
 
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:
+        with smtplib.SMTP_SSL(SMTP_HOST, 465, timeout=15) as server:
             server.ehlo()
-            server.starttls()
             server.login(SMTP_EMAIL, SMTP_PASSWORD)
             server.sendmail(SMTP_EMAIL, to_email, msg.as_string())
         return True
