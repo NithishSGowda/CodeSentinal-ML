@@ -50,7 +50,12 @@ from scanner.patcher import generate_code_fix
 FILE_CACHE = {}
 
 app = Flask(__name__, template_folder='templates', static_folder='static')
-CORS(app, origins=['http://localhost:3000', 'http://127.0.0.1:3000'])
+CORS(app, origins=[
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    r'https://.*\.netlify\.app',
+    r'https://.*\.onrender\.com',
+], supports_credentials=True)
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max upload
 
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), 'uploads')

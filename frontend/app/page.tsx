@@ -147,7 +147,7 @@ interface ScanResult {
   }>
 }
 
-const FLASK_API = 'http://localhost:5000'
+const FLASK_API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
 
 const LOADER_PHASES = [
   'Initializing CodeSentinel ML threat engine...',
@@ -216,7 +216,7 @@ export default function Home() {
     localStorage.removeItem('cs_token')
     localStorage.removeItem('cs_user')
     if (user) {
-      fetch('http://localhost:5000/api/auth/logout', {
+      fetch(`${FLASK_API}/api/auth/logout`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: user.email }),
@@ -230,7 +230,7 @@ export default function Home() {
     setEditNameLoading(true)
     try {
       const token = localStorage.getItem('cs_token') || ''
-      const res   = await fetch('http://localhost:5000/api/auth/update-name', {
+      const res   = await fetch(`${FLASK_API}/api/auth/update-name`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ email: authUser.email, token, name: editNameVal.trim() }),
@@ -251,7 +251,7 @@ export default function Home() {
     setDeleteLoading(true)
     try {
       const token = localStorage.getItem('cs_token') || ''
-      await fetch('http://localhost:5000/api/auth/delete-account', {
+      await fetch(`${FLASK_API}/api/auth/delete-account`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ email: authUser.email, token }),
