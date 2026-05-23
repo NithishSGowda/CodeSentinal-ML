@@ -8,3 +8,4 @@ pymongo
 certifi
 google-generativeai
 gunicorn
+python-dotenv
