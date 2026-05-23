@@ -74,9 +74,10 @@ train_model(force=False)
 # Example: Gmail with App Password (not your regular Gmail password).
 # Generate an App Password at: https://myaccount.google.com/apppasswords
 SMTP_HOST     = os.environ.get('SMTP_HOST', 'smtp.gmail.com')
-SMTP_PORT     = int(os.environ.get('SMTP_PORT', '587'))
+SMTP_PORT     = int(os.environ.get('SMTP_PORT', '465'))
 SMTP_EMAIL    = os.environ.get('SMTP_EMAIL', '')       # e.g. yourname@gmail.com
 SMTP_PASSWORD = os.environ.get('SMTP_PASSWORD', '')    # Gmail App Password
+BREVO_API_KEY = os.environ.get('BREVO_API_KEY', '')    # Brevo HTTP API key (preferred for cloud hosting)
 
 OTP_STORE = {}   # { email: { otp, expires_at, name } }  — always in-memory (short TTL)
 USER_STORE = {}  # fallback in-memory store when MongoDB is unavailable
@@ -145,89 +146,102 @@ def _db_delete_user(email: str):
 def _generate_otp(length: int = 6) -> str:
     return ''.join(random.choices(string.digits, k=length))
 
-def _send_otp_email(to_email: str, otp: str, name: str = '') -> bool:
-    """Send OTP via SMTP. Returns True on success, False on failure."""
-    greeting = f"Operator {name}" if name else "Operator"
+def _send_email(to_email: str, subject: str, html_body: str, plain_body: str) -> bool:
+    """Send email via Brevo API (preferred) or SMTP fallback."""
+    # ── Brevo HTTP API (works on all hosting platforms, port 443) ────────────
+    if BREVO_API_KEY:
+        try:
+            resp = requests.post(
+                'https://api.brevo.com/v3/smtp/email',
+                headers={
+                    'api-key': BREVO_API_KEY,
+                    'Content-Type': 'application/json',
+                },
+                json={
+                    'sender':      {'name': 'CodeSentinel ML', 'email': SMTP_EMAIL or 'noreply@codesentinel.ml'},
+                    'to':          [{'email': to_email}],
+                    'subject':     subject,
+                    'htmlContent': html_body,
+                    'textContent': plain_body,
+                },
+                timeout=15,
+            )
+            if resp.status_code in (200, 201):
+                print(f'[EMAIL] Sent via Brevo to {to_email}')
+                return True
+            print(f'[EMAIL] Brevo error {resp.status_code}: {resp.text}')
+            return False
+        except Exception as exc:
+            print(f'[EMAIL] Brevo exception: {exc}')
+            return False
+
+    # ── SMTP fallback (for local dev) ─────────────────────────────────────────
+    if not SMTP_EMAIL or not SMTP_PASSWORD:
+        print('[EMAIL] No email credentials configured.')
+        return False
     try:
-        msg = MIMEMultipart('alternative')
-        msg['Subject'] = f'[SENTINEL AI] Access Code: {otp}'
-        msg['From']    = f'CodeSentinel ML <{SMTP_EMAIL}>'
-        msg['To']      = to_email
+        with smtplib.SMTP_SSL(SMTP_HOST, 465, timeout=15) as server:
+            server.ehlo()
+            server.login(SMTP_EMAIL, SMTP_PASSWORD)
+            from email.mime.multipart import MIMEMultipart as _MM
+            from email.mime.text import MIMEText as _MT
+            msg = _MM('alternative')
+            msg['Subject'] = subject
+            msg['From']    = f'CodeSentinel ML <{SMTP_EMAIL}>'
+            msg['To']      = to_email
+            msg.attach(_MT(plain_body, 'plain'))
+            msg.attach(_MT(html_body, 'html'))
+            server.sendmail(SMTP_EMAIL, to_email, msg.as_string())
+        return True
+    except Exception as exc:
+        print(f'[EMAIL] SMTP error: {exc}')
+        return False
 
-        plain_body = f"""\
-SENTINEL AI v1.0 — Secure Access System
-========================================
 
-{greeting}, your one-time access code is:
-
-  {otp}
-
-This code expires in 5 minutes.
-Do not share this code with anyone.
-
-If you did not request this, ignore this message.
-
-— CodeSentinel ML Security Operations
-"""
-
-        html_body = f"""\
-<!DOCTYPE html>
-<html>
-<head><meta charset="UTF-8"></head>
+def _send_otp_email(to_email: str, otp: str, name: str = '') -> bool:
+    """Send OTP access code email via Brevo API or SMTP fallback."""
+    greeting   = f"Operator {name}" if name else "Operator"
+    plain_body = (
+        f"SENTINEL AI v1.0 — Secure Access System\n"
+        f"========================================\n\n"
+        f"{greeting}, your one-time access code is:\n\n"
+        f"  {otp}\n\n"
+        f"This code expires in 5 minutes.\n"
+        f"Do not share this code with anyone.\n\n"
+        f"If you did not request this, ignore this message.\n\n"
+        f"— CodeSentinel ML Security Operations"
+    )
+    html_body = f"""<!DOCTYPE html>
+<html><head><meta charset="UTF-8"></head>
 <body style="margin:0;padding:0;background:#020308;font-family:'Courier New',monospace;">
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#020308;min-height:100vh;">
     <tr><td align="center" style="padding:40px 20px;">
       <table width="520" cellpadding="0" cellspacing="0" style="background:rgba(3,6,17,0.95);border:1px solid rgba(0,240,255,0.18);border-radius:20px;overflow:hidden;">
-        <!-- Header bar -->
-        <tr><td style="background:linear-gradient(90deg,rgba(0,240,255,0.08),rgba(139,92,246,0.08));padding:0;height:2px;">
-          <div style="height:2px;background:linear-gradient(90deg,transparent,#00f0ff,#8b5cf6,transparent);"></div>
-        </td></tr>
-        <!-- Logo area -->
+        <tr><td style="padding:0;height:2px;"><div style="height:2px;background:linear-gradient(90deg,transparent,#00f0ff,#8b5cf6,transparent);"></div></td></tr>
         <tr><td style="padding:36px 40px 24px;text-align:center;">
-          <div style="display:inline-flex;align-items:center;justify-content:center;gap:10px;margin-bottom:8px;">
-            <div style="width:36px;height:36px;background:rgba(0,240,255,0.08);border:1px solid rgba(0,240,255,0.3);border-radius:10px;display:inline-flex;align-items:center;justify-content:center;">
-              <span style="font-size:18px;">🛡️</span>
-            </div>
-            <span style="font-size:13px;font-weight:900;letter-spacing:4px;color:#e2e8f0;text-transform:uppercase;">CodeSentinel ML</span>
-          </div>
-          <div style="font-size:9px;letter-spacing:5px;color:#00f0ff;text-transform:uppercase;font-weight:700;">SENTINEL AI v1.0 · Secure Access</div>
+          <span style="font-size:13px;font-weight:900;letter-spacing:4px;color:#e2e8f0;text-transform:uppercase;">CodeSentinel ML</span><br>
+          <div style="font-size:9px;letter-spacing:5px;color:#00f0ff;text-transform:uppercase;font-weight:700;margin-top:4px;">SENTINEL AI v1.0 &middot; Secure Access</div>
         </td></tr>
-        <!-- Divider -->
         <tr><td style="padding:0 40px;"><div style="height:1px;background:rgba(0,240,255,0.08);"></div></td></tr>
-        <!-- Body -->
         <tr><td style="padding:32px 40px;">
           <p style="margin:0 0 6px;font-size:10px;letter-spacing:3px;text-transform:uppercase;color:rgba(0,240,255,0.6);font-weight:700;">INCOMING TRANSMISSION</p>
           <p style="margin:0 0 24px;font-size:15px;color:#e2e8f0;font-weight:600;">{greeting},</p>
-          <p style="margin:0 0 24px;font-size:13px;color:#94a3b8;line-height:1.7;">Your secure one-time access code for <strong style="color:#e2e8f0;">CodeSentinel ML</strong> has been generated. Enter this code to authorize your session.</p>
-          <!-- OTP Box -->
-          <div style="background:rgba(0,0,0,0.5);border:1px solid rgba(0,240,255,0.25);border-radius:14px;padding:28px;text-align:center;margin:0 0 24px;position:relative;">
+          <p style="margin:0 0 24px;font-size:13px;color:#94a3b8;line-height:1.7;">Your secure one-time access code for <strong style="color:#e2e8f0;">CodeSentinel ML</strong> has been generated.</p>
+          <div style="background:rgba(0,0,0,0.5);border:1px solid rgba(0,240,255,0.25);border-radius:14px;padding:28px;text-align:center;margin:0 0 24px;">
             <div style="font-size:10px;letter-spacing:4px;text-transform:uppercase;color:rgba(0,240,255,0.5);font-weight:700;margin-bottom:14px;">ACCESS CODE</div>
             <div style="font-size:42px;font-weight:900;letter-spacing:14px;color:#00f0ff;text-shadow:0 0 20px rgba(0,240,255,0.5);">{otp}</div>
-            <div style="margin-top:14px;font-size:9px;letter-spacing:3px;text-transform:uppercase;color:rgba(148,163,184,0.5);font-weight:700;">⏱ EXPIRES IN 5 MINUTES</div>
+            <div style="margin-top:14px;font-size:9px;letter-spacing:3px;text-transform:uppercase;color:rgba(148,163,184,0.5);font-weight:700;">&#9200; EXPIRES IN 5 MINUTES</div>
           </div>
-          <p style="margin:0;font-size:11px;color:rgba(148,163,184,0.5);line-height:1.7;">If you did not request this access code, you can safely ignore this message. Your account remains secure.</p>
+          <p style="margin:0;font-size:11px;color:rgba(148,163,184,0.5);line-height:1.7;">If you did not request this access code, you can safely ignore this message.</p>
         </td></tr>
-        <!-- Footer -->
         <tr><td style="padding:20px 40px 32px;text-align:center;border-top:1px solid rgba(255,255,255,0.04);">
-          <p style="margin:0;font-size:9px;letter-spacing:3px;text-transform:uppercase;color:rgba(148,163,184,0.3);font-weight:700;">CODESENTINEL ML · SECURITY OPERATIONS CENTER · LOCAL TELEMETRY</p>
+          <p style="margin:0;font-size:9px;letter-spacing:3px;text-transform:uppercase;color:rgba(148,163,184,0.3);font-weight:700;">CODESENTINEL ML &middot; SECURITY OPERATIONS CENTER</p>
         </td></tr>
       </table>
     </td></tr>
   </table>
-</body>
-</html>
-"""
-        msg.attach(MIMEText(plain_body, 'plain'))
-        msg.attach(MIMEText(html_body, 'html'))
-
-        with smtplib.SMTP_SSL(SMTP_HOST, 465, timeout=15) as server:
-            server.ehlo()
-            server.login(SMTP_EMAIL, SMTP_PASSWORD)
-            server.sendmail(SMTP_EMAIL, to_email, msg.as_string())
-        return True
-    except Exception as exc:
-        print(f"[AUTH] SMTP error: {exc}")
-        return False
+</body></html>"""
+    return _send_email(to_email, f'[SENTINEL AI] Access Code: {otp}', html_body, plain_body)
 
 
 # ── Auth Endpoints ────────────────────────────────────────────────────────────
@@ -246,8 +260,8 @@ def auth_send_otp():
     if mode == 'register' and not name:
         return jsonify({'error': 'Full name is required for registration.'}), 400
 
-    if not SMTP_EMAIL or not SMTP_PASSWORD:
-        return jsonify({'error': 'SMTP credentials not configured on the server. Set SMTP_EMAIL and SMTP_PASSWORD environment variables.'}), 503
+    if not BREVO_API_KEY and (not SMTP_EMAIL or not SMTP_PASSWORD):
+        return jsonify({'error': 'Email service not configured on the server.'}), 503
 
     otp = _generate_otp()
     OTP_STORE[email] = {
