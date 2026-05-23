@@ -84,13 +84,8 @@ ALLOWED_EXTENSIONS = {'.py', '.js', '.ts', '.php', '.java', '.c', '.cpp', '.cs',
 train_model(force=False)
 
 # ── Auth / OTP Configuration ─────────────────────────────────────────────────
-# Set SMTP_EMAIL and SMTP_PASSWORD as environment variables before starting the server.
-# Example: Gmail with App Password (not your regular Gmail password).
-# Generate an App Password at: https://myaccount.google.com/apppasswords
-SMTP_HOST     = os.environ.get('SMTP_HOST', 'smtp.gmail.com')
-SMTP_PORT     = int(os.environ.get('SMTP_PORT', '465'))
-SMTP_EMAIL    = os.environ.get('SMTP_EMAIL', '')       # e.g. yourname@gmail.com
-SMTP_PASSWORD = os.environ.get('SMTP_PASSWORD', '')    # Gmail App Password
+# Generate a Brevo API Key at: https://www.brevo.com/
+SENDER_EMAIL  = os.environ.get('SENDER_EMAIL', 'noreply@codesentinel.ml')
 BREVO_API_KEY = os.environ.get('BREVO_API_KEY', '')    # Brevo HTTP API key (preferred for cloud hosting)
 
 OTP_STORE = {}   # { email: { otp, expires_at, name } }  — always in-memory (short TTL)
@@ -161,54 +156,34 @@ def _generate_otp(length: int = 6) -> str:
     return ''.join(random.choices(string.digits, k=length))
 
 def _send_email(to_email: str, subject: str, html_body: str, plain_body: str) -> bool:
-    """Send email via Brevo API (preferred) or SMTP fallback."""
-    # ── Brevo HTTP API (works on all hosting platforms, port 443) ────────────
-    if BREVO_API_KEY:
-        try:
-            resp = requests.post(
-                'https://api.brevo.com/v3/smtp/email',
-                headers={
-                    'api-key': BREVO_API_KEY,
-                    'Content-Type': 'application/json',
-                },
-                json={
-                    'sender':      {'name': 'CodeSentinel ML', 'email': SMTP_EMAIL or 'noreply@codesentinel.ml'},
-                    'to':          [{'email': to_email}],
-                    'subject':     subject,
-                    'htmlContent': html_body,
-                    'textContent': plain_body,
-                },
-                timeout=15,
-            )
-            if resp.status_code in (200, 201):
-                print(f'[EMAIL] Sent via Brevo to {to_email}')
-                return True
-            print(f'[EMAIL] Brevo error {resp.status_code}: {resp.text}')
-            return False
-        except Exception as exc:
-            print(f'[EMAIL] Brevo exception: {exc}')
-            return False
-
-    # ── SMTP fallback (for local dev) ─────────────────────────────────────────
-    if not SMTP_EMAIL or not SMTP_PASSWORD:
-        print('[EMAIL] No email credentials configured.')
+    """Send email via Brevo REST API (HTTPS/443)."""
+    if not BREVO_API_KEY:
+        print('[EMAIL] BREVO_API_KEY not configured.')
         return False
+
     try:
-        with smtplib.SMTP_SSL(SMTP_HOST, 465, timeout=15) as server:
-            server.ehlo()
-            server.login(SMTP_EMAIL, SMTP_PASSWORD)
-            from email.mime.multipart import MIMEMultipart as _MM
-            from email.mime.text import MIMEText as _MT
-            msg = _MM('alternative')
-            msg['Subject'] = subject
-            msg['From']    = f'CodeSentinel ML <{SMTP_EMAIL}>'
-            msg['To']      = to_email
-            msg.attach(_MT(plain_body, 'plain'))
-            msg.attach(_MT(html_body, 'html'))
-            server.sendmail(SMTP_EMAIL, to_email, msg.as_string())
-        return True
+        resp = requests.post(
+            'https://api.brevo.com/v3/smtp/email',
+            headers={
+                'api-key': BREVO_API_KEY,
+                'Content-Type': 'application/json',
+            },
+            json={
+                'sender':      {'name': 'CodeSentinel ML', 'email': SENDER_EMAIL},
+                'to':          [{'email': to_email}],
+                'subject':     subject,
+                'htmlContent': html_body,
+                'textContent': plain_body,
+            },
+            timeout=15,
+        )
+        if resp.status_code in (200, 201):
+            print(f'[EMAIL] Sent via Brevo to {to_email}')
+            return True
+        print(f'[EMAIL] Brevo error {resp.status_code}: {resp.text}')
+        return False
     except Exception as exc:
-        print(f'[EMAIL] SMTP error: {exc}')
+        print(f'[EMAIL] Brevo exception: {exc}')
         return False
 
 
@@ -274,7 +249,7 @@ def auth_send_otp():
     if mode == 'register' and not name:
         return jsonify({'error': 'Full name is required for registration.'}), 400
 
-    if not BREVO_API_KEY and (not SMTP_EMAIL or not SMTP_PASSWORD):
+    if not BREVO_API_KEY:
         return jsonify({'error': 'Email service not configured on the server.'}), 503
 
     otp = _generate_otp()
@@ -364,23 +339,8 @@ def _send_welcome_email(to_email: str, name: str) -> bool:
     h.append('</td></tr></table></td></tr></table></body></html>')
     html = ''.join(h)
 
-    try:
-        msg = MIMEMultipart('alternative')
-        msg['Subject'] = '[SENTINEL AI] Welcome aboard, ' + first + '. Your operator profile is active.'
-        msg['From']    = 'CodeSentinel ML <' + SMTP_EMAIL + '>'
-        msg['To']      = to_email
-        msg.attach(MIMEText(plain, 'plain'))
-        msg.attach(MIMEText(html,  'html'))
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as server:
-            server.ehlo()
-            server.starttls()
-            server.login(SMTP_EMAIL, SMTP_PASSWORD)
-            server.sendmail(SMTP_EMAIL, to_email, msg.as_string())
-        print('[AUTH] Welcome email dispatched to ' + to_email)
-        return True
-    except Exception as exc:
-        print('[AUTH] Welcome email SMTP error: ' + str(exc))
-        return False
+    subject = '[SENTINEL AI] Welcome aboard, ' + first + '. Your operator profile is active.'
+    return _send_email(to_email, subject, html, plain)
 
 
 
