@@ -147,7 +147,7 @@ interface ScanResult {
   }>
 }
 
-const FLASK_API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
+const FLASK_API = process.env.NEXT_PUBLIC_API_URL || 'https://codesentinal-ml.onrender.com'
 
 const LOADER_PHASES = [
   'Initializing CodeSentinel ML threat engine...',
@@ -277,7 +277,7 @@ export default function Home() {
       setScanning(false)
       setDashTab('overview')
     } catch {
-      setError('Could not connect to the Flask cybersecurity server at http://localhost:5000. Start it by running: python server.py')
+      setError('Could not connect to the Flask cybersecurity server at ' + FLASK_API + '. Please ensure the backend is running.')
       setScanning(false)
     }
   }, [])

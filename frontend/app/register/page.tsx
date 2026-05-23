@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Shield, AlertTriangle, ChevronRight, Activity, Mail, User, ArrowRight, Cpu } from 'lucide-react'
 
-const FLASK_API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
+const FLASK_API = process.env.NEXT_PUBLIC_API_URL || 'https://codesentinal-ml.onrender.com'
 
 const fadeUp = {
   hidden: { opacity: 0, y: 24 },
