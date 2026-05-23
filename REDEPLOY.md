@@ -25,7 +25,7 @@ Under the **Environment** tab on Render, ensure the following variables are conf
 | :--- | :--- | :--- |
 | `SMTP_EMAIL` | `techtonic202005@gmail.com` | Used as the sender address ("From:") for outgoing emails. |
 | `SMTP_PASSWORD` | `<your_smtp_app_password>` | Your Google App Password (e.g., `cfyb fzkq qgtf uepw`). |
-| `MONGO_URI` | `mongodb+srv://nithishgowda1906_db_user:58PChYSacV82eDD7@cluster0.xukkji1.mongodb.net/` | MongoDB connection string. |
+| `MONGO_URI` | `mongodb+srv://nithishaws2005_db_user:CodeSentinel@codesentinel-ml.1pdqbkm.mongodb.net/?appName=CodeSentinel-ML` | MongoDB connection string. |
 | `GEMINI_API_KEY` | `AIzaSyBmc0oxYOFdWdnxdmTXZ0uehWZblKQ5A1Y` | For AI-powered vulnerability explanation and patching. |
 | `FRONTEND_URL` | `https://codesentinel-ml.netlify.app` | Redirects visitors hitting the API's root `/` URL back to your main site. |
 
