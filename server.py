@@ -26,9 +26,9 @@ from flask_cors import CORS
 # ── Force IPv4 for all outbound connections ───────────────────────────────────
 # Render's free tier has no IPv6 route — this prevents "Network is unreachable"
 _orig_getaddrinfo = socket.getaddrinfo
-socket.getaddrinfo = lambda h, p, f=0, t=0, pr=0, fl=0: _orig_getaddrinfo(
-    h, p, socket.AF_INET, t, pr, fl
-)
+def _patched_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0, **kwargs):
+    return _orig_getaddrinfo(host, port, socket.AF_INET, type, proto, flags)
+socket.getaddrinfo = _patched_getaddrinfo
 
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
