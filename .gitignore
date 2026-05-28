@@ -24,3 +24,8 @@ frontend/build/
 out/
 build/
 .DS_Store
+
+# ML -- exclude large Kaggle downloads and backups
+backend/ml/kaggle_data/
+backend/ml/backups/
+backend/test_nosql_fix.py

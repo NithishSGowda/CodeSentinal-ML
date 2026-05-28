@@ -1,0 +1,1094 @@
+# -*- coding: utf-8 -*-
+"""
+ml/build_dataset.py
+-------------------
+Generates the training dataset programmatically using Python's csv module,
+which handles quoting and special characters correctly.
+
+Run once: python backend/ml/build_dataset.py
+"""
+
+import csv
+import os
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+OUTPUT = os.path.join(BASE_DIR, 'dataset.csv')
+
+# Each entry: (code_snippet, label)
+# Labels: 'High Risk' | 'Medium Risk' | 'Safe'
+SAMPLES = [
+    # ─── HIGH RISK: SQL Injection ───────────────────────────────────────────
+    ("def get_user(id): return db.query('SELECT * FROM users WHERE id = ' + id)", "High Risk"),
+    ("query = f'SELECT * FROM data WHERE name = {name}'", "High Risk"),
+    ("cursor.execute('DELETE FROM users WHERE id = {}'.format(user_id))", "High Risk"),
+    ("db.execute('SELECT * FROM accounts WHERE username=' + username + ' AND password=' + password)", "High Risk"),
+    ("cursor.execute(f'UPDATE users SET role=admin WHERE id={user_id}')", "High Risk"),
+    ("def login(user, pw): return f'SELECT * FROM users WHERE user={user} AND pw={pw}'", "High Risk"),
+    ("cursor.execute('SELECT * FROM orders WHERE user_id = ' + str(uid))", "High Risk"),
+    ("query = 'SELECT * FROM products WHERE category = ' + category", "High Risk"),
+    ("sql = 'INSERT INTO logs VALUES (' + user_data + ')'", "High Risk"),
+    ("cursor.execute('UPDATE balance SET amount = ' + amount + ' WHERE id = ' + uid)", "High Risk"),
+    ("raw_query = 'SELECT * FROM admin WHERE pass = ' + pwd", "High Risk"),
+    ("conn.execute('DROP TABLE ' + table_name)", "High Risk"),
+    ("cursor.execute('SELECT * FROM files WHERE owner = %s' % username)", "High Risk"),
+    ("query = 'DELETE FROM sessions WHERE token = ' + token", "High Risk"),
+    ("cursor.execute('EXEC sp_executesql ' + raw_sql)", "High Risk"),
+    ("db.execute('SELECT * FROM inventory WHERE id=' + item_id)", "High Risk"),
+    ("sql = f'SELECT * FROM roles WHERE name = {role}'", "High Risk"),
+    ("cursor.execute('SELECT salary FROM employees WHERE id = ' + emp_id)", "High Risk"),
+    ("stmt = 'UPDATE users SET admin=1 WHERE username=' + user", "High Risk"),
+    ("cursor.execute(\"SELECT * FROM users WHERE login='\" + login + \"'\")", "High Risk"),
+    ("db.query('SELECT * FROM users WHERE name = \\'' + name + '\\'')", "High Risk"),
+    ("const query = `SELECT * FROM users WHERE id = ${userId}`; db.query(query)", "High Risk"),
+    ("db.query('SELECT * FROM users WHERE name = \\'' + req.body.name + '\\'')", "High Risk"),
+    ("mongoose.findOne({ $where: 'this.name == ' + userInput })", "High Risk"),
+    ("const pass = req.body.password; db.query(`SELECT * FROM users WHERE pass='${pass}'`)", "High Risk"),
+    ("String query = \"SELECT * FROM users WHERE id = \" + id;", "High Risk"),
+    ("$query = \"SELECT * FROM users WHERE id = \" . $_GET['id'];", "High Risk"),
+    ("$result = mysql_query(\"SELECT * FROM users WHERE name = '\" . $_POST['name'] . \"'\");", "High Risk"),
+    ("query := fmt.Sprintf(\"SELECT * FROM users WHERE id = %s\", r.FormValue(\"id\"))", "High Risk"),
+    ("db.Exec(\"DELETE FROM users WHERE name = '\" + name + \"'\")", "High Risk"),
+
+    # ─── HIGH RISK: Command Injection ────────────────────────────────────────
+    ("def execute_cmd(cmd): os.system(cmd)", "High Risk"),
+    ("subprocess.Popen(request.args.get('cmd'), shell=True)", "High Risk"),
+    ("cmd = request.json.get('command'); os.system(cmd)", "High Risk"),
+    ("subprocess.call(request.args['cmd'], shell=True)", "High Risk"),
+    ("os.popen(request.args.get('cmd')).read()", "High Risk"),
+    ("subprocess.check_output(user_cmd, shell=True)", "High Risk"),
+    ("os.system('ping ' + host)", "High Risk"),
+    ("subprocess.call('nslookup ' + domain, shell=True)", "High Risk"),
+    ("os.popen('cat ' + filepath)", "High Risk"),
+    ("os.system('convert ' + user_file + ' output.png')", "High Risk"),
+    ("subprocess.Popen('curl ' + user_url, shell=True)", "High Risk"),
+    ("os.system('zip -r ' + archive + ' ' + target_dir)", "High Risk"),
+    ("subprocess.check_call(request.form['cmd'], shell=True)", "High Risk"),
+    ("import os; os.system('rm -rf /')", "High Risk"),
+    ("os.popen('ls ' + request.args.get('dir')).read()", "High Risk"),
+    ("subprocess.run(user_input, shell=True)", "High Risk"),
+    ("os.system('mv ' + src + ' ' + dst)", "High Risk"),
+    ("os.popen('wget ' + url).read()", "High Risk"),
+    ("os.execvp(user_bin, user_args)", "High Risk"),
+    ("os.system('find / -name ' + user_input)", "High Risk"),
+    ("subprocess.Popen(request.json['args'], shell=True)", "High Risk"),
+    ("app.get('/exec', (req, res) => { exec(req.query.cmd, (err, out) => res.send(out)) })", "High Risk"),
+    ("child_process.exec(req.body.command)", "High Risk"),
+    ("Runtime.getRuntime().exec(request.getParameter('cmd'))", "High Risk"),
+    ("Runtime.getRuntime().exec(new String[]{'sh', '-c', userInput})", "High Risk"),
+    ("new ProcessBuilder(userCmd).start()", "High Risk"),
+    ("system($_GET['cmd']);", "High Risk"),
+    ("exec($_POST['command'], $output);", "High Risk"),
+    ("passthru($_REQUEST['cmd']);", "High Risk"),
+    ("cmd := exec.Command(r.FormValue('cmd'))", "High Risk"),
+    ("out, _ := exec.Command('sh', '-c', userInput).Output()", "High Risk"),
+
+    # ─── HIGH RISK: Code Execution ───────────────────────────────────────────
+    ("eval(user_input)", "High Risk"),
+    ("exec(req.body.script)", "High Risk"),
+    ("result = eval(request.form.get('expr'))", "High Risk"),
+    ("exec(request.form['code'])", "High Risk"),
+    ("input_code = input('Enter code: '); exec(input_code)", "High Risk"),
+    ("eval(compile(user_code, '<string>', 'exec'))", "High Risk"),
+    ("exec(compile(request.data, '<string>', 'exec'))", "High Risk"),
+    ("eval(req.body.code)", "High Risk"),
+    ("const result = Function(userCode)()", "High Risk"),
+    ("vm.runInThisContext(userCode)", "High Risk"),
+    ("__import__(user_module)", "High Risk"),
+    ("getattr(obj, request.args.get('method'))()", "High Risk"),
+    ("globals()[request.args.get('func')]()", "High Risk"),
+    ("locals()[request.form.get('var')] = request.form.get('val')", "High Risk"),
+    ("setattr(obj, request.args.get('attr'), request.args.get('val'))", "High Risk"),
+    ("delattr(obj, request.args.get('attr'))", "High Risk"),
+    ("importlib.import_module(request.args.get('plugin'))", "High Risk"),
+    ("eval($_POST['code']);", "High Risk"),
+    ("include($_GET['page']);", "High Risk"),
+    ("require($_POST['file']);", "High Risk"),
+
+    # ─── HIGH RISK: Deserialization ──────────────────────────────────────────
+    ("pickle.loads(request.data)", "High Risk"),
+    ("data = pickle.loads(base64.b64decode(request.cookies.get('session')))", "High Risk"),
+    ("import marshal; marshal.loads(request.data)", "High Risk"),
+    ("torch.load(request.files['model'])", "High Risk"),
+    ("jsonpickle.decode(request.data)", "High Risk"),
+    ("shelve.open(user_path)", "High Risk"),
+    ("numpy.load(user_file, allow_pickle=True)", "High Risk"),
+    ("import dill; dill.loads(request.data)", "High Risk"),
+    ("import joblib; joblib.load(request.files['model'])", "High Risk"),
+    ("pandas.read_pickle(user_path)", "High Risk"),
+    ("pickle.load(open(request.args.get('file'), 'rb'))", "High Risk"),
+    ("ObjectInputStream ois = new ObjectInputStream(request.getInputStream()); ois.readObject()", "High Risk"),
+    ("$data = unserialize($_COOKIE['data']);", "High Risk"),
+    ("deserialize(request.body)", "High Risk"),
+
+    # ─── HIGH RISK: Path Traversal / File Ops ────────────────────────────────
+    ("file = open(request.args.get('file'), 'r')", "High Risk"),
+    ("open(request.args.get('path')).read()", "High Risk"),
+    ("shutil.rmtree(user_path)", "High Risk"),
+    ("os.remove(request.form.get('file'))", "High Risk"),
+    ("path = '../' * int(request.args.get('depth')) + filename", "High Risk"),
+    ("open('/etc/passwd').read()", "High Risk"),
+    ("with open(request.args.get('path')) as f: return f.read()", "High Risk"),
+    ("shutil.copy(user_src, '/var/www/' + user_dst)", "High Risk"),
+    ("os.rename(request.form['old'], request.form['new'])", "High Risk"),
+    ("zipfile.ZipFile(request.files['zip']).extractall('/tmp')", "High Risk"),
+    ("tarfile.open(user_file).extractall(user_dir)", "High Risk"),
+    ("os.makedirs(request.args.get('dir'), exist_ok=True)", "High Risk"),
+    ("with open(user_filename, 'w') as f: f.write(user_content)", "High Risk"),
+    ("send_file(request.args.get('file'))", "High Risk"),
+    ("open('/etc/shadow').read()", "High Risk"),
+    ("ioutil.ReadFile(r.FormValue('path'))", "High Risk"),
+    ("os.Remove(r.FormValue('file'))", "High Risk"),
+    ("file_get_contents($_GET['path']);", "High Risk"),
+    ("$file = fopen($_POST['filename'], 'w'); fwrite($file, $_POST['content']);", "High Risk"),
+    ("fs.readFile(req.query.path, 'utf8', callback)", "High Risk"),
+    ("fs.writeFile(req.body.filename, req.body.content)", "High Risk"),
+    ("Files.write(Paths.get(request.getParameter('path')), data)", "High Risk"),
+    ("String filePath = request.getParameter('file'); new FileInputStream(filePath)", "High Risk"),
+
+    # ─── HIGH RISK: XSS / Template Injection ─────────────────────────────────
+    ("def render_unsafe_page(): return render_template_string(request.args.get('tmpl'))", "High Risk"),
+    ("template = request.args.get('t'); render_template_string(template)", "High Risk"),
+    ("return render_template_string('<h1>' + user_input + '</h1>')", "High Risk"),
+    ("markup = '<script>' + request.args.get('js') + '</script>'", "High Risk"),
+    ("return Markup(request.form['html'])", "High Risk"),
+    ("template_str = '{{' + user_input + '}}'; jinja2.Template(template_str).render()", "High Risk"),
+    ("from mako.template import Template; Template(user_tpl).render()", "High Risk"),
+    ("res.send(req.query.name)", "High Risk"),
+    ("document.write('<script>' + userInput + '</script>')", "High Risk"),
+    ("innerHTML = req.body.content", "High Risk"),
+    ("const html = template.replace('{{content}}', userContent); res.send(html)", "High Risk"),
+    ("const data = JSON.parse(req.body); eval(data.script)", "High Risk"),
+    ("echo $_GET['message'];", "High Risk"),
+    ("print $_POST['content'];", "High Risk"),
+    ("fmt.Fprintf(w, r.FormValue('msg'))", "High Risk"),
+    ("response.getWriter().write(request.getParameter('msg'))", "High Risk"),
+
+    # ─── HIGH RISK: SSRF / Open Redirect ─────────────────────────────────────
+    ("def unsafe_redirect(url): return redirect(request.args.get('next'))", "High Risk"),
+    ("res.redirect(req.query.url)", "High Risk"),
+    ("header('Location: ' . $_GET['url']);", "High Risk"),
+    ("http.Redirect(w, r, r.URL.Query().Get('url'), http.StatusFound)", "High Risk"),
+    ("response.sendRedirect(request.getParameter('url'))", "High Risk"),
+    ("new URL(request.getParameter('url')).openStream()", "High Risk"),
+    ("xmlrpc_client = xmlrpc.client.ServerProxy(user_url)", "High Risk"),
+
+    # ─── HIGH RISK: Insecure Auth / JWT ──────────────────────────────────────
+    ("jwt.decode(token, options={'verify_signature': False})", "High Risk"),
+    ("session['admin'] = request.args.get('admin')", "High Risk"),
+    ("user_role = request.cookies.get('role')", "High Risk"),
+    ("is_admin = request.args.get('admin') == 'true'", "High Risk"),
+    ("Class.forName(request.getParameter('class')).newInstance()", "High Risk"),
+    ("Method m = obj.getClass().getMethod(request.getParameter('method')); m.invoke(obj)", "High Risk"),
+    ("System.setProperty('com.sun.jndi.ldap.object.trustURLCodebase', 'true')", "High Risk"),
+    ("new InitialContext().lookup(request.getParameter('jndi'))", "High Risk"),
+    ("preg_replace('/' . $_GET['pattern'] . '/e', $_GET['replace'], $str);", "High Risk"),
+
+    # ─── MEDIUM RISK: Hardcoded Secrets ──────────────────────────────────────
+    ("password = 'admin123'", "Medium Risk"),
+    ("api_key = 'AIzaSyAXXXXXXX'", "Medium Risk"),
+    ("SECRET_KEY = 'super_secret_key_123'", "Medium Risk"),
+    ("token = '1234567890abcdef'", "Medium Risk"),
+    ("access_token = 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9'", "Medium Risk"),
+    ("private_key = '-----BEGIN RSA PRIVATE KEY-----'", "Medium Risk"),
+    ("DB_HOST = 'localhost'; DB_PASS = 'root'", "Medium Risk"),
+    ("GITHUB_TOKEN = 'ghp_xxxxxxxxxxxxxxxxxxxxxxxx'", "Medium Risk"),
+    ("AWS_SECRET_ACCESS_KEY = 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY'", "Medium Risk"),
+    ("STRIPE_SECRET = 'sk_live_EXAMPLE_FAKE_KEY_REDACTED'", "Medium Risk"),
+    ("SENDGRID_API_KEY = 'SG.XXXXXXXXXXXXXXXXXXXXXX'", "Medium Risk"),
+    ("TWILIO_AUTH_TOKEN = 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'", "Medium Risk"),
+    ("DATABASE_URL = 'postgresql://admin:password@localhost/db'", "Medium Risk"),
+    ("MONGO_URI = 'mongodb://root:secret@localhost:27017'", "Medium Risk"),
+    ("smtp_password = 'MyEmailPass123'", "Medium Risk"),
+    ("ftp_pass = 'ftppassword'", "Medium Risk"),
+    ("client_secret = 'cs_xxxxxxxxxxxxxxxx'", "Medium Risk"),
+    ("encryption_key = 'hardcoded_key_123'", "Medium Risk"),
+    ("master_password = 'Pa$$w0rd'", "Medium Risk"),
+    ("DB_PASSWORD = 'P@ssw0rd2024'", "Medium Risk"),
+    ("JWT_SECRET = 'jwt_secret_key'", "Medium Risk"),
+    ("OAUTH_CLIENT_SECRET = 'oauth_secret_abc123'", "Medium Risk"),
+    ("const key = 'hardcoded_jwt_secret'", "Medium Risk"),
+    ("const apiKey = 'sk-xxxxxxxxxxxxxxxx'", "Medium Risk"),
+    ("const dbPass = 'mypassword123'", "Medium Risk"),
+    ("const db = mysql.createConnection({ host: 'localhost', password: 'root' })", "Medium Risk"),
+    ("String password = \"admin1234\";", "Medium Risk"),
+    ("String apiKey = \"AIzaSyABCDEFGHIJKLMNOPQRSTUVWXYZ\";", "Medium Risk"),
+    ("private static final String SECRET = \"my_secret_key\";", "Medium Risk"),
+    ("conn = DriverManager.getConnection(\"jdbc:mysql://localhost/db\", \"root\", \"password\")", "Medium Risk"),
+    ("$password = 'admin123';", "Medium Risk"),
+    ("$api_key = 'sk_live_xxxxxxxxxxxxxxxx';", "Medium Risk"),
+    ("define('DB_PASSWORD', 'root');", "Medium Risk"),
+    ("define('SECRET_KEY', 'my_secret_key_12345');", "Medium Risk"),
+    ("password := \"mysecretpassword\"", "Medium Risk"),
+    ("apiKey := \"sk-xxxxxxxxxxxx\"", "Medium Risk"),
+    ("db, _ := sql.Open(\"mysql\", \"root:password@localhost/db\")", "Medium Risk"),
+
+    # ─── MEDIUM RISK: Weak Crypto ─────────────────────────────────────────────
+    ("hashlib.md5(password.encode()).hexdigest()", "Medium Risk"),
+    ("hashlib.sha1(password.encode()).hexdigest()", "Medium Risk"),
+    ("md5_hash = hashlib.new('md5', data).hexdigest()", "Medium Risk"),
+    ("password_hash = sha256(password.encode()).hexdigest()", "Medium Risk"),
+    ("key = '0000000000000000'", "Medium Risk"),
+    ("iv = b'\\x00' * 16", "Medium Risk"),
+    ("nonce = os.urandom(8)", "Medium Risk"),
+    ("RSA.generate(512)", "Medium Risk"),
+    ("RSA.generate(1024)", "Medium Risk"),
+    ("h := md5.New(); io.WriteString(h, password)", "Medium Risk"),
+    ("MessageDigest md = MessageDigest.getInstance(\"MD5\"); md.update(data);", "Medium Risk"),
+    ("Cipher cipher = Cipher.getInstance(\"DES/ECB/PKCS5Padding\");", "Medium Risk"),
+    ("KeyPairGenerator.getInstance(\"RSA\").initialize(512);", "Medium Risk"),
+    ("hash('md5', $password)", "Medium Risk"),
+    ("sha1($data)", "Medium Risk"),
+
+    # ─── MEDIUM RISK: Insecure Config / Debug ────────────────────────────────
+    ("app.config['SECRET_KEY'] = 'dev'", "Medium Risk"),
+    ("app.run(debug=True)", "Medium Risk"),
+    ("DEBUG = True", "Medium Risk"),
+    ("ALLOWED_HOSTS = ['*']", "Medium Risk"),
+    ("cors_origin = '*'", "Medium Risk"),
+    ("verify=False", "Medium Risk"),
+    ("ssl._create_unverified_context()", "Medium Risk"),
+    ("requests.get(url, verify=False)", "Medium Risk"),
+    ("urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)", "Medium Risk"),
+    ("ssl_context = ssl.create_default_context(); ssl_context.check_hostname = False", "Medium Risk"),
+    ("CORS(app, origins='*')", "Medium Risk"),
+    ("app.config['SESSION_COOKIE_SECURE'] = False", "Medium Risk"),
+    ("app.config['SESSION_COOKIE_HTTPONLY'] = False", "Medium Risk"),
+    ("app.config['WTF_CSRF_ENABLED'] = False", "Medium Risk"),
+    ("FLASK_ENV = 'development'", "Medium Risk"),
+    ("app.run(host='0.0.0.0', debug=True)", "Medium Risk"),
+    ("response.headers['X-Frame-Options'] = 'ALLOWALL'", "Medium Risk"),
+    ("CSRF_TRUSTED_ORIGINS = ['*']", "Medium Risk"),
+    ("SECURE_SSL_REDIRECT = False", "Medium Risk"),
+    ("MAX_UPLOAD_SIZE = None", "Medium Risk"),
+    ("ALLOWED_FILE_TYPES = ['*']", "Medium Risk"),
+    ("process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'", "Medium Risk"),
+    ("app.use(cors({ origin: '*' }))", "Medium Risk"),
+    ("tls.Config{InsecureSkipVerify: true}", "Medium Risk"),
+    ("$debug = true; error_reporting(E_ALL);", "Medium Risk"),
+    ("$curl = curl_init(); curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, false);", "Medium Risk"),
+    ("ini_set('display_errors', '1');", "Medium Risk"),
+    ("header('Access-Control-Allow-Origin: *');", "Medium Risk"),
+
+    # ─── MEDIUM RISK: Debug Artifacts / TODO ─────────────────────────────────
+    ("# TODO: validate user input", "Medium Risk"),
+    ("# FIXME: disable debug mode before deployment", "Medium Risk"),
+    ("# TEMP: bypass auth for testing", "Medium Risk"),
+    ("# HACK: quick fix, needs proper solution", "Medium Risk"),
+    ("# FIXME: security vulnerability here", "Medium Risk"),
+    ("# WARNING: insecure, fix before release", "Medium Risk"),
+    ("pass  # authentication bypassed for testing", "Medium Risk"),
+    ("if os.environ.get('SKIP_AUTH'): return True", "Medium Risk"),
+    ("print('DEBUG: user logged in as admin')", "Medium Risk"),
+    ("print(password)", "Medium Risk"),
+    ("logging.warning('Password: %s', password)", "Medium Risk"),
+    ("print(f'Secret key: {secret_key}')", "Medium Risk"),
+    ("print(traceback.format_exc())", "Medium Risk"),
+    ("return str(e)", "Medium Risk"),
+    ("exception_msg = str(exception); return jsonify({'error': exception_msg})", "Medium Risk"),
+    ("System.out.println(\"DEBUG password: \" + password);", "Medium Risk"),
+    ("log.debug(\"User credentials: \" + username + \":\" + password);", "Medium Risk"),
+    ("console.log('User password:', password)", "Medium Risk"),
+    ("fmt.Println(\"DEBUG: password=\", password)", "Medium Risk"),
+    ("random.randint(0, 9999)", "Medium Risk"),
+    ("random.random() * 100", "Medium Risk"),
+    ("Math.random().toString(36)", "Medium Risk"),
+    ("rand.Intn(100)", "Medium Risk"),
+    ("new Random().nextInt()", "Medium Risk"),
+    ("os.path.join(base_dir, user_input)", "Medium Risk"),
+    ("base64.b64decode(token)", "Medium Risk"),
+    ("eval('1 + 1')", "Medium Risk"),
+    ("print(password)", "Medium Risk"),
+    ("def redirect_user(url): return redirect(url)", "Medium Risk"),
+
+    # ─── SAFE: Parameterized Queries ──────────────────────────────────────────
+    ("def safe_get_user(id): return db.query('SELECT * FROM users WHERE id = ?', (id,))", "Safe"),
+    ("cursor.execute('SELECT * FROM users WHERE id = ?', (user_id,))", "Safe"),
+    ("cursor.execute('SELECT * FROM users WHERE email = ?', (email,))", "Safe"),
+    ("cursor.execute('UPDATE users SET status = 1 WHERE id = ?', (user_id,))", "Safe"),
+    ("cursor.execute('SELECT * FROM orders WHERE user_id = ?', (uid,))", "Safe"),
+    ("cursor.execute('INSERT INTO logs (event, user_id) VALUES (?, ?)', (event, uid))", "Safe"),
+    ("cursor.execute('UPDATE users SET name = ? WHERE id = ?', (name, uid))", "Safe"),
+    ("cursor.execute('DELETE FROM sessions WHERE token = ?', (token,))", "Safe"),
+    ("cursor.execute('SELECT * FROM products WHERE cat = ?', [category])", "Safe"),
+    ("cursor.execute('SELECT salary FROM employees WHERE id = ?', (emp_id,))", "Safe"),
+    ("db.query('SELECT * FROM users WHERE email = $1', [email])", "Safe"),
+    ("sql = text('SELECT * FROM users WHERE id = :id'); db.execute(sql, {'id': uid})", "Safe"),
+    ("cursor.execute('SELECT COUNT(*) FROM users WHERE active = ?', (True,))", "Safe"),
+    ("User.query.filter_by(id=user_id).first()", "Safe"),
+    ("db.session.query(Order).filter(Order.user_id == uid).all()", "Safe"),
+    ("User.objects.filter(username=username).first()", "Safe"),
+    ("User.objects.get(pk=user_id)", "Safe"),
+    ("Product.objects.filter(category__in=safe_categories)", "Safe"),
+    ("db.session.query(User).filter(User.id == int(user_id)).first()", "Safe"),
+    ("const stmt = db.prepare('SELECT * FROM users WHERE id = ?'); stmt.run(userId)", "Safe"),
+    ("const user = await User.findOne({ where: { id: sanitize(userId) } })", "Safe"),
+    ("const result = await db.query('SELECT * FROM users WHERE id = $1', [userId])", "Safe"),
+    ("const stmt = connection.prepare('SELECT * FROM accounts WHERE email = ?')", "Safe"),
+    ("PreparedStatement ps = conn.prepareStatement('SELECT * FROM users WHERE id = ?'); ps.setInt(1, id);", "Safe"),
+    ("String sql = 'SELECT * FROM products WHERE id = ?'; PreparedStatement ps = conn.prepareStatement(sql);", "Safe"),
+    ("$stmt = $pdo->prepare('SELECT * FROM users WHERE id = ?'); $stmt->execute([$id]);", "Safe"),
+    ("$stmt = $mysqli->prepare('SELECT * FROM users WHERE email = ?'); $stmt->bind_param('s', $email);", "Safe"),
+    ("stmt, _ := db.Prepare(\"SELECT * FROM users WHERE id = ?\"); stmt.QueryRow(id)", "Safe"),
+    ("row := db.QueryRow(\"SELECT * FROM users WHERE email = $1\", email)", "Safe"),
+    ("cursor.execute('SELECT * FROM users WHERE id = %(id)s', {'id': user_id})", "Safe"),
+    ("cursor.execute('SELECT * FROM products WHERE name = %s', (product_name,))", "Safe"),
+
+    # ─── SAFE: Input Validation & Sanitization ────────────────────────────────
+    ("username = bleach.clean(request.form['username'])", "Safe"),
+    ("sanitized = html.escape(user_input)", "Safe"),
+    ("clean_html = bleach.linkify(user_content)", "Safe"),
+    ("value = int(request.args.get('id'))", "Safe"),
+    ("if not isinstance(age, int): raise ValueError('age must be int')", "Safe"),
+    ("schema.validate(request.json)", "Safe"),
+    ("marshmallow_schema.load(request.data)", "Safe"),
+    ("pydantic_model.parse_obj(request.json)", "Safe"),
+    ("user_id = int(request.args.get('id', 0))", "Safe"),
+    ("amount = float(request.form.get('amount', 0))", "Safe"),
+    ("safe_name = re.sub(r'[^a-zA-Z0-9_]', '', name)", "Safe"),
+    ("url = urllib.parse.urlparse(redirect_url); assert url.scheme in ('http', 'https')", "Safe"),
+    ("import re; pattern = re.compile(r'^[a-zA-Z0-9]+$')", "Safe"),
+    ("if not re.match(r'^[a-z0-9]+$', username): raise ValueError('Invalid')", "Safe"),
+    ("try: int(user_id) except ValueError: return 'Error'", "Safe"),
+    ("int_val = int(request.args.get('page', 1))", "Safe"),
+    ("clamped = max(1, min(100, int(request.args.get('limit', 10))))", "Safe"),
+    ("safe_redirect = urllib.parse.urlparse(next_url); assert safe_redirect.netloc == ''", "Safe"),
+    ("serializer = UserSerializer(data=request.data); serializer.is_valid(raise_exception=True)", "Safe"),
+    ("form = LoginForm(request.POST); form.is_valid()", "Safe"),
+    ("def validate_uuid(val): uuid.UUID(val); return val", "Safe"),
+    ("const clean = DOMPurify.sanitize(userInput)", "Safe"),
+    ("const escaped = he.encode(userInput)", "Safe"),
+    ("const schema = Joi.object({ name: Joi.string().alphanum().max(30) })", "Safe"),
+    ("String clean = ESAPI.encoder().encodeForHTML(userInput);", "Safe"),
+    ("String safe = StringEscapeUtils.escapeHtml4(userInput);", "Safe"),
+    ("$clean = htmlspecialchars($_GET['name'], ENT_QUOTES, 'UTF-8');", "Safe"),
+    ("$safe = filter_input(INPUT_GET, 'id', FILTER_SANITIZE_NUMBER_INT);", "Safe"),
+    ("safe := html.EscapeString(r.FormValue('name'))", "Safe"),
+    ("abort(400, description='Invalid input')", "Safe"),
+    ("abort(401, description='Authentication required')", "Safe"),
+    ("abort(403, description='Permission denied')", "Safe"),
+
+    # ─── SAFE: Secure File Operations ────────────────────────────────────────
+    ("safe_path = os.path.realpath(os.path.join(base, filename))", "Safe"),
+    ("if not safe_path.startswith(base_dir): abort(403)", "Safe"),
+    ("filename = secure_filename(request.files['file'].filename)", "Safe"),
+    ("allowed_exts = {'.png', '.jpg', '.gif'}; assert ext in allowed_exts", "Safe"),
+    ("file.save(os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(file.filename)))", "Safe"),
+    ("with open('config.json') as f: config = json.load(f)", "Safe"),
+    ("with open(filepath, 'r') as f: data = f.read()", "Safe"),
+    ("os.chmod(filepath, 0o600)", "Safe"),
+    ("os.umask(0o027)", "Safe"),
+    ("safePath := filepath.Join(baseDir, filename); if !strings.HasPrefix(safePath, baseDir) { http.Error(w, 'Forbidden', 403) }", "Safe"),
+    ("const safePath = path.resolve(baseDir, filename); if (!safePath.startsWith(baseDir)) throw new Error()", "Safe"),
+    ("const filename = sanitizeFilename(req.body.filename)", "Safe"),
+    ("$safe_path = realpath(base_path . $_GET['file']); if (strpos($safe_path, base_path) !== 0) die('Access denied');", "Safe"),
+    ("String safePath = Paths.get(baseDir, filename).normalize().toString(); if (!safePath.startsWith(baseDir)) throw new SecurityException();", "Safe"),
+
+    # ─── SAFE: Password Hashing ───────────────────────────────────────────────
+    ("def hash_password(pwd): return bcrypt.hashpw(pwd.encode(), bcrypt.gensalt())", "Safe"),
+    ("pwd = bcrypt.generate_password_hash(password).decode('utf-8')", "Safe"),
+    ("bcrypt.check_password_hash(user.password, form.password.data)", "Safe"),
+    ("from werkzeug.security import generate_password_hash, check_password_hash", "Safe"),
+    ("hashed = generate_password_hash(password, method='pbkdf2:sha256:260000')", "Safe"),
+    ("check_password_hash(user.password, password)", "Safe"),
+    ("password_hash = argon2.hash(password)", "Safe"),
+    ("ph = PasswordHasher(); ph.verify(hash, password)", "Safe"),
+    ("key = PBKDF2(password, salt, dkLen=32, count=310000, prf='hmac-sha256')", "Safe"),
+    ("key = scrypt(password, salt=salt, n=2**14, r=8, p=1, dklen=32)", "Safe"),
+    ("bcrypt.hash(password, 10, (err, hash) => {})", "Safe"),
+    ("bcrypt.compare(password, hash, (err, result) => {})", "Safe"),
+    ("String hash = BCrypt.hashpw(password, BCrypt.gensalt());", "Safe"),
+    ("$hash = password_hash($password, PASSWORD_BCRYPT);", "Safe"),
+    ("password_verify($password, $hash)", "Safe"),
+
+    # ─── SAFE: Secure Crypto / Tokens ────────────────────────────────────────
+    ("def encrypt(data): return cipher.encrypt(data)", "Safe"),
+    ("token = secrets.token_hex(32)", "Safe"),
+    ("csrf_token = secrets.token_hex(16)", "Safe"),
+    ("token = secrets.token_urlsafe(32)", "Safe"),
+    ("key = os.urandom(32)", "Safe"),
+    ("iv = os.urandom(16)", "Safe"),
+    ("cipher = AES.new(key, AES.MODE_GCM)", "Safe"),
+    ("cipher = Fernet(Fernet.generate_key())", "Safe"),
+    ("iv = os.urandom(12); cipher = AES.new(key, AES.MODE_GCM, nonce=iv)", "Safe"),
+    ("from cryptography.fernet import Fernet; f = Fernet(key)", "Safe"),
+    ("hmac_sig = hmac.new(key, msg, hashlib.sha256).hexdigest()", "Safe"),
+    ("hmac.compare_digest(token_a, token_b)", "Safe"),
+    ("secrets.compare_digest(provided_sig, expected_sig)", "Safe"),
+    ("MessageDigest sha256 = MessageDigest.getInstance('SHA-256'); sha256.update(data);", "Safe"),
+    ("KeyGenerator kg = KeyGenerator.getInstance('AES'); kg.init(256);", "Safe"),
+    ("SecureRandom sr = new SecureRandom(); byte[] token = new byte[32]; sr.nextBytes(token);", "Safe"),
+    ("const bytes = crypto.randomBytes(32)", "Safe"),
+    ("h := sha256.New(); h.Write(data)", "Safe"),
+    ("token := make([]byte, 32); rand.Read(token)", "Safe"),
+    ("$token = bin2hex(random_bytes(32));", "Safe"),
+    ("keyring.set_password('myapp', 'apikey', api_key)", "Safe"),
+    ("api_key = keyring.get_password('myapp', 'apikey')", "Safe"),
+
+    # ─── SAFE: JWT / Auth ─────────────────────────────────────────────────────
+    ("jwt.encode({'sub': user_id}, SECRET_KEY, algorithm='HS256')", "Safe"),
+    ("token = jwt.encode({'user': user_id, 'exp': datetime.utcnow() + timedelta(hours=1)}, SECRET_KEY)", "Safe"),
+    ("const token = jwt.sign({ id: user.id }, process.env.SECRET, { expiresIn: '1h' })", "Safe"),
+    ("@login_required", "Safe"),
+    ("@require_http_methods(['GET', 'POST'])", "Safe"),
+    ("@csrf_protect", "Safe"),
+    ("token = itsdangerous.URLSafeTimedSerializer(SECRET_KEY).dumps(email)", "Safe"),
+    ("s = Serializer(app.config['SECRET_KEY']); data = s.loads(token)", "Safe"),
+    ("def check_permission(user, action): return user.role in ALLOWED_ROLES[action]", "Safe"),
+    ("abort(403) if not current_user.is_authenticated else None", "Safe"),
+
+    # ─── SAFE: Environment Variables ──────────────────────────────────────────
+    ("db_host = os.getenv('DB_HOST')", "Safe"),
+    ("api_token = os.environ.get('API_TOKEN')", "Safe"),
+    ("password = os.getenv('DB_PASSWORD')", "Safe"),
+    ("SECRET_KEY = os.environ.get('SECRET_KEY', os.urandom(24).hex())", "Safe"),
+    ("SECRET_KEY = os.environ['SECRET_KEY']", "Safe"),
+    ("DATABASE_URL = os.environ['DATABASE_URL']", "Safe"),
+    ("API_KEY = os.environ.get('API_KEY')", "Safe"),
+    ("String password = System.getenv('DB_PASSWORD');", "Safe"),
+    ("String secret = System.getenv('APP_SECRET');", "Safe"),
+    ("$password = $_ENV['DB_PASSWORD'];", "Safe"),
+    ("password := os.Getenv('DB_PASSWORD')", "Safe"),
+    ("apiKey := os.Getenv('API_KEY')", "Safe"),
+    ("const secret = process.env.JWT_SECRET", "Safe"),
+    ("const dbPass = process.env.DB_PASSWORD", "Safe"),
+    ("const apiKey = process.env.API_KEY", "Safe"),
+    ("dotenv.load_dotenv()", "Safe"),
+    ("engine = create_engine(os.environ['DATABASE_URL'], pool_pre_ping=True)", "Safe"),
+    ("conn = psycopg2.connect(os.environ['DATABASE_URL'], sslmode='require')", "Safe"),
+    ("client = MongoClient(os.environ['MONGO_URI'], tls=True)", "Safe"),
+
+    # ─── SAFE: Security Headers ───────────────────────────────────────────────
+    ("response.headers['Content-Security-Policy'] = \"default-src 'self'\"", "Safe"),
+    ("response.headers['X-Content-Type-Options'] = 'nosniff'", "Safe"),
+    ("response.headers['Strict-Transport-Security'] = 'max-age=31536000'", "Safe"),
+    ("response.headers['X-Frame-Options'] = 'DENY'", "Safe"),
+    ("app.config['SESSION_COOKIE_SECURE'] = True", "Safe"),
+    ("app.config['SESSION_COOKIE_HTTPONLY'] = True", "Safe"),
+    ("app.config['WTF_CSRF_ENABLED'] = True", "Safe"),
+    ("app.use(helmet())", "Safe"),
+    ("app.use(helmet.contentSecurityPolicy())", "Safe"),
+    ("res.setHeader('X-Frame-Options', 'DENY')", "Safe"),
+    ("response.setHeader('X-Frame-Options', 'DENY');", "Safe"),
+    ("response.setHeader('Content-Security-Policy', \"default-src 'self'\");", "Safe"),
+    ("response.setHeader('Strict-Transport-Security', 'max-age=31536000');", "Safe"),
+    ("w.Header().Set('X-Frame-Options', 'DENY')", "Safe"),
+    ("w.Header().Set('Content-Security-Policy', \"default-src 'self'\")", "Safe"),
+    ("header('X-Frame-Options: DENY');", "Safe"),
+    ("header(\"Content-Security-Policy: default-src 'self'\");", "Safe"),
+    ("header('X-Content-Type-Options: nosniff');", "Safe"),
+    ("http.SetCookie(w, &http.Cookie{Name: 'session', Value: token, HttpOnly: true, Secure: true})", "Safe"),
+
+    # ─── SAFE: Safe Subprocess ────────────────────────────────────────────────
+    ("result = subprocess.run(['git', 'status'], shell=False, capture_output=True)", "Safe"),
+    ("subprocess.run(shlex.split(command), shell=False)", "Safe"),
+    ("proc = subprocess.Popen(['git', 'log', '--oneline'], stdout=subprocess.PIPE)", "Safe"),
+    ("result = subprocess.run(['/usr/bin/convert', input_file, output_file], shell=False)", "Safe"),
+    ("cmd := exec.Command('git', 'status')", "Safe"),
+    ("res = subprocess.check_output(['ping', '-c', '1', ip_address])", "Safe"),
+
+    # ─── SAFE: Rate Limiting / Session ───────────────────────────────────────
+    ("app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }))", "Safe"),
+    ("limiter.limit('10 per minute')(view_func)", "Safe"),
+    ("session.permanent = False", "Safe"),
+    ("session.modified = True", "Safe"),
+    ("cache.set(key, value, timeout=300)", "Safe"),
+
+    # ─── SAFE: Logging / Audit ────────────────────────────────────────────────
+    ("def log_error(msg): logger.error(msg)", "Safe"),
+    ("logging.info('User logged in: %s', user_id)", "Safe"),
+    ("audit_log.info('User %s accessed resource %s', user_id, resource_id)", "Safe"),
+    ("logging.getLogger().setLevel(logging.WARNING)", "Safe"),
+
+    # ─── SAFE: General Utility ────────────────────────────────────────────────
+    ("def hello(): print('Hello World')", "Safe"),
+    ("class User: def __init__(self, name): self.name = name", "Safe"),
+    ("import math; result = math.sqrt(16)", "Safe"),
+    ("def calculate_tax(amount): return amount * 0.2", "Safe"),
+    ("def get_time(): return datetime.now()", "Safe"),
+    ("for i in range(10): print(i)", "Safe"),
+    ("def is_valid_email(email): return '@' in email and '.' in email", "Safe"),
+    ("from flask import Flask; app = Flask(__name__)", "Safe"),
+    ("def parse_json(data): return json.loads(data)", "Safe"),
+    ("def send_email(to, subject): pass", "Safe"),
+    ("def process_data(data): return data.upper()", "Safe"),
+    ("return jsonify({'status': 'ok'})", "Safe"),
+    ("return make_response(jsonify(data), 200)", "Safe"),
+    ("import sys; sys.exit(0)", "Safe"),
+    ("import re; pattern = re.compile(r'^[a-zA-Z0-9]+$')", "Safe"),
+    ("from functools import wraps", "Safe"),
+    ("req_data = request.get_json()", "Safe"),
+    ("user_data = request.get_json(force=False, silent=True)", "Safe"),
+    ("if request.content_type != 'application/json': abort(415)", "Safe"),
+    ("conn = sqlite3.connect('app.db')", "Safe"),
+    ("def render_page(template): return render_template(template)", "Safe"),
+    ("yaml.safe_load(data)", "Safe"),
+    ("config = configparser.ConfigParser(); config.read('config.ini')", "Safe"),
+    ("import ast; ast.literal_eval(safe_string)", "Safe"),
+    ("with contextlib.suppress(Exception): cleanup()", "Safe"),
+    ("def rate_limit(func): @wraps(func) def wrapper(*args, **kwargs): ... return wrapper", "Safe"),
+    ("db.session.commit()", "Safe"),
+    ("db.session.rollback()", "Safe"),
+    ("db.session.close()", "Safe"),
+    ("with db.transaction(): db.execute(sql, params)", "Safe"),
+    ("response = requests.get(url, timeout=5, verify=True)", "Safe"),
+
+    # ======================================================================
+    # EXTENDED DATASET v2 — Real CVE/CWE/OWASP/Bandit-Inspired Patterns
+    # Sources: NVD CVE database, OWASP Top-10 2021, CWE Top-25,
+    #          Bandit rules, Semgrep security rules, PyCQA/bandit,
+    #          Kaggle "Code Vulnerabilities" & "Vulnerability Fix" datasets
+    # ======================================================================
+
+    # ─── HIGH RISK: SQL Injection — Extended (CWE-89) ────────────────────
+    ("query = 'SELECT * FROM users WHERE username = \\'' + username + '\\' AND password = \\'' + password + '\\''", "High Risk"),
+    ("db.execute('SELECT * FROM config WHERE key = ' + config_key)", "High Risk"),
+    ("cursor.execute('SELECT * FROM transactions WHERE amount > ' + min_amount)", "High Risk"),
+    ("sql = 'SELECT email FROM users WHERE id = ' + request.args['id']", "High Risk"),
+    ("cursor.execute('INSERT INTO comments VALUES (\\'' + comment_text + '\\'')", "High Risk"),
+    ("query = 'UPDATE settings SET value = ' + new_value + ' WHERE name = ' + setting_name", "High Risk"),
+    ("cursor.execute('SELECT * FROM products WHERE price < ' + max_price + ' ORDER BY name')", "High Risk"),
+    ("db.raw('SELECT * FROM logs WHERE user_id = ' + uid)", "High Risk"),
+    ("connection.query('SELECT * FROM ' + table_name + ' LIMIT 10')", "High Risk"),
+    ("cursor.execute(f\"SELECT * FROM {table} WHERE status = '{status}'\")", "High Risk"),
+    ("stmt = 'SELECT * FROM audit WHERE action = \\'' + action + '\\' AND user = \\'' + user + '\\''", "High Risk"),
+    ("query = 'SELECT * FROM ' + request.form.get('table')", "High Risk"),
+    ("cursor.execute('SELECT * FROM users WHERE dob = \\'' + dob + '\\' AND country = \\'' + country + '\\''", "High Risk"),
+    ("db.query('DELETE FROM messages WHERE id = ' + msg_id + ' AND user = ' + user_id)", "High Risk"),
+    ("cursor.execute('SELECT COUNT(*) FROM users WHERE username = \\'' + uname + '\\'')", "High Risk"),
+
+    # ─── HIGH RISK: NoSQL Injection (CWE-943) ────────────────────────────
+    ("db.users.find({'username': request.form['username'], '$where': 'this.password == \\'' + pwd + '\\''  })", "High Risk"),
+    ("collection.find({'$where': 'this.' + field + ' == ' + value})", "High Risk"),
+    ("db.users.find({'username': {'$regex': request.args.get('q')}})", "High Risk"),
+    ("db.eval('db.users.find({username: \\'' + username + '\\'})')", "High Risk"),
+    ("collection.update({'_id': id}, {'$set': json.loads(request.data)})", "High Risk"),
+    ("model.find({}).sort(request.args.get('field'), 1)", "High Risk"),
+
+    # ─── HIGH RISK: LDAP Injection (CWE-90) ──────────────────────────────
+    ("ldap_filter = '(uid=' + username + ')'", "High Risk"),
+    ("conn.search(base_dn, '(mail=' + email + ')', attributes=['*'])", "High Risk"),
+    ("search_filter = '(&(objectClass=user)(sAMAccountName=' + user_input + '))'", "High Risk"),
+    ("ldap.search_s(base, ldap.SCOPE_SUBTREE, '(cn=' + name + ')')", "High Risk"),
+    ("directory.search(base_dn, f'(uid={user_id})(password={pwd})')", "High Risk"),
+
+    # ─── HIGH RISK: XXE Injection (CWE-611) ──────────────────────────────
+    ("tree = etree.parse(request.files['xml'])", "High Risk"),
+    ("doc = lxml.etree.fromstring(user_xml_bytes)", "High Risk"),
+    ("dom = xml.dom.minidom.parseString(request.data)", "High Risk"),
+    ("parser = xml.etree.ElementTree.XMLParser(); ElementTree.parse(user_file, parser)", "High Risk"),
+    ("saxparser = xml.sax.make_parser(); saxparser.parse(user_input)", "High Risk"),
+    ("result = xmltodict.parse(request.get_data(), process_namespaces=True)", "High Risk"),
+
+    # ─── HIGH RISK: SSTI (Server-Side Template Injection, CWE-94) ────────
+    ("env = jinja2.Environment(); tmpl = env.from_string(request.args.get('template'))", "High Risk"),
+    ("rendered = Template(request.form['tpl']).render(user=current_user)", "High Risk"),
+    ("output = pystache.render(request.json.get('template'), context)", "High Risk"),
+    ("return render_template_string(f'Hello {request.args.get(\"name\")}!')", "High Risk"),
+    ("tmpl = request.args.get('tmpl', ''); return jinja2.Template(tmpl).render()", "High Risk"),
+    ("from string import Template; Template(user_tpl).substitute(os.environ)", "High Risk"),
+
+    # ─── HIGH RISK: SSRF (CWE-918) ───────────────────────────────────────
+    ("response = requests.get(request.args.get('url'))", "High Risk"),
+    ("r = urllib.request.urlopen(request.form['target_url'])", "High Risk"),
+    ("data = httpx.get(request.json['webhook_url']).text", "High Risk"),
+    ("img = urllib.request.urlopen(user_supplied_url).read()", "High Risk"),
+    ("socket.create_connection((request.args['host'], int(request.args['port'])))", "High Risk"),
+    ("resp = requests.post(callback_url, json=payload)", "High Risk"),
+    ("content = urllib.request.urlopen(f'http://{host}/api').read()", "High Risk"),
+
+    # ─── HIGH RISK: Race Condition / TOCTOU (CWE-362) ────────────────────
+    ("if os.path.exists(tmpfile): os.system('cat ' + tmpfile)", "High Risk"),
+    ("if os.access(filepath, os.R_OK): data = open(filepath).read()", "High Risk"),
+    ("if os.path.isfile(upload_path): shutil.move(upload_path, dest)", "High Risk"),
+
+    # ─── HIGH RISK: Insecure Deserialization — Extended (CWE-502) ────────
+    ("session_data = pickle.loads(base64.urlsafe_b64decode(request.headers['X-Session']))", "High Risk"),
+    ("user_obj = pickle.load(open('/tmp/' + request.args['session_id'] + '.pkl', 'rb'))", "High Risk"),
+    ("config = yaml.load(request.data, Loader=yaml.Loader)", "High Risk"),
+    ("yaml.load(open(request.args['config']))", "High Risk"),
+    ("task = celery.backend.get(request.args.get('task_id'))", "High Risk"),
+    ("obj = jsonpickle.decode(request.get_data(as_text=True))", "High Risk"),
+
+    # ─── HIGH RISK: ReDoS (CWE-1333) ─────────────────────────────────────
+    ("re.match(request.args.get('pattern'), user_input)", "High Risk"),
+    ("re.compile(user_pattern).search(data)", "High Risk"),
+    ("pattern = re.compile(f'({user_input})*'); pattern.match(long_string)", "High Risk"),
+
+    # ─── HIGH RISK: Log Injection / Log4Shell-style (CWE-117) ────────────
+    ("logging.info('User login: ' + username)", "High Risk"),
+    ("logger.debug('Query: ' + raw_query)", "High Risk"),
+    ("print('Processing: ' + user_data)", "High Risk"),
+    ("log.write(request.headers.get('User-Agent') + '\\n')", "High Risk"),
+    ("logger.info(f'User {request.args.get(\"name\")} logged in')", "High Risk"),
+
+    # ─── HIGH RISK: Hardcoded Admin/Backdoor (CWE-798) ───────────────────
+    ("if password == 'backdoor123': return admin_access()", "High Risk"),
+    ("if username == 'admin' and password == 'password': grant_access()", "High Risk"),
+    ("MASTER_KEY = 'b4ckd00r_k3y'; if key == MASTER_KEY: bypass_auth()", "High Risk"),
+    ("if request.args.get('debug_key') == 'secret123': return dump_db()", "High Risk"),
+    ("if token == '0000-0000-0000-0000': return admin_panel()", "High Risk"),
+
+    # ─── HIGH RISK: Dangerous Python builtins (CWE-676) ──────────────────
+    ("compile(user_code, '<string>', 'exec')", "High Risk"),
+    ("ast.parse(user_code); exec(compile(user_code, '<string>', 'exec'))", "High Risk"),
+    ("builtins.__dict__[request.args['func']]()", "High Risk"),
+    ("vars()[request.form['varname']] = request.form['value']", "High Risk"),
+    ("type(name, (BaseModel,), request.json)()", "High Risk"),
+
+    # ─── HIGH RISK: Cloud / AWS Misconfig ────────────────────────────────
+    ("s3.get_object(Bucket=bucket, Key=request.args.get('file'))", "High Risk"),
+    ("s3.download_file(bucket, request.form['key'], '/tmp/' + request.form['key'])", "High Risk"),
+    ("boto3.client('s3').put_object(Bucket='public-bucket', Key=filename, Body=data, ACL='public-read')", "High Risk"),
+    ("iam.create_access_key(UserName=request.args.get('user'))", "High Risk"),
+    ("lambda_client.invoke(FunctionName=request.json['function'], Payload=request.data)", "High Risk"),
+
+    # ─── HIGH RISK: Docker / Container escape ────────────────────────────
+    ("os.system('docker run --privileged --rm -v /:/mnt alpine chroot /mnt ' + cmd)", "High Risk"),
+    ("subprocess.run(['docker', 'exec', container_id, 'sh', '-c', user_cmd], shell=False)", "High Risk"),
+
+    # ─── HIGH RISK: Django-specific vulnerabilities ───────────────────────
+    ("User.objects.raw('SELECT * FROM auth_user WHERE username = \\'' + username + '\\'')", "High Risk"),
+    ("queryset = User.objects.extra(where=['username = \\'' + username + '\\''  ])", "High Risk"),
+    ("return HttpResponse(request.GET.get('message'))", "High Risk"),
+    ("mark_safe(request.POST.get('html_content'))", "High Risk"),
+    ("response = redirect(request.GET.get('next', '/'))", "High Risk"),
+    ("exec(request.POST.get('code', ''))", "High Risk"),
+
+    # ─── HIGH RISK: Flask/Werkzeug vulnerabilities ────────────────────────
+    ("app.secret_key = 'dev'; app.run(debug=True, host='0.0.0.0')", "High Risk"),
+    ("@app.route('/admin'); def admin(): return open('/etc/passwd').read()", "High Risk"),
+    ("filename = request.args.get('f'); return send_from_directory('/var/www', filename)", "High Risk"),
+
+    # ─── HIGH RISK: Node.js / Express vulnerabilities ─────────────────────
+    ("app.get('/run', (req, res) => { const { exec } = require('child_process'); exec(req.query.cmd, (e, o) => res.send(o)) })", "High Risk"),
+    ("const query = 'SELECT * FROM users WHERE id = ' + req.params.id; db.query(query, callback)", "High Risk"),
+    ("res.render(req.query.template, { user: req.user })", "High Risk"),
+    ("const code = req.body.code; eval(code)", "High Risk"),
+    ("require(req.query.module)(req, res)", "High Risk"),
+    ("const filePath = path.join(__dirname, req.params[0]); res.sendFile(filePath)", "High Risk"),
+    ("app.use(express.static(req.query.dir))", "High Risk"),
+
+    # ─── HIGH RISK: Spring / Java framework vulnerabilities ───────────────
+    ("String hql = 'FROM User WHERE username = \\'' + username + '\\''; session.createQuery(hql).list()", "High Risk"),
+    ("session.createNativeQuery('SELECT * FROM users WHERE id = ' + id).getResultList()", "High Risk"),
+    ("entityManager.createNativeQuery('DELETE FROM sessions WHERE token = \\'' + token + '\\'').executeUpdate()", "High Risk"),
+    ("ProcessBuilder pb = new ProcessBuilder(request.getParameter('cmd')); pb.start()", "High Risk"),
+    ("Class cls = Class.forName(className); Method m = cls.getMethod(methodName); m.invoke(null, args)", "High Risk"),
+    ("XStream xstream = new XStream(); xstream.fromXML(request.getInputStream())", "High Risk"),
+    ("ObjectInputStream ois = new ObjectInputStream(new Base64InputStream(new ByteArrayInputStream(Base64.decode(data)))); ois.readObject()", "High Risk"),
+
+    # ─── HIGH RISK: PHP vulnerabilities ──────────────────────────────────
+    ("$query = 'SELECT * FROM users WHERE username = \\'' . $_POST['username'] . '\\'';", "High Risk"),
+    ("$result = pg_query($conn, 'SELECT * FROM orders WHERE id = ' . $_GET['id']);", "High Risk"),
+    ("$cmd = $_POST['cmd']; shell_exec($cmd);", "High Risk"),
+    ("$file = $_GET['file']; echo file_get_contents($file);", "High Risk"),
+    ("$class = $_GET['class']; $obj = new $class();", "High Risk"),
+    ("extract($_POST);", "High Risk"),
+    ("$data = json_decode(file_get_contents('php://input'), true); extract($data);", "High Risk"),
+    ("move_uploaded_file($_FILES['file']['tmp_name'], '/var/www/uploads/' . $_FILES['file']['name']);", "High Risk"),
+
+    # ─── HIGH RISK: Ruby on Rails vulnerabilities ─────────────────────────
+    ("User.where('name = \\'' + params[:name] + '\\'')", "High Risk"),
+    ("eval(params[:code])", "High Risk"),
+    ("render inline: params[:template]", "High Risk"),
+    ("redirect_to params[:url]", "High Risk"),
+    ("system(params[:cmd])", "High Risk"),
+    ("YAML.load(params[:data])", "High Risk"),
+
+    # ─── MEDIUM RISK: Insecure Direct Object Reference (IDOR, CWE-639) ──
+    ("user_data = db.get_user(request.args.get('user_id'))", "Medium Risk"),
+    ("order = Order.query.get(request.form['order_id'])", "Medium Risk"),
+    ("doc = Document.find(params[:id])", "Medium Risk"),
+    ("return get_file(request.args.get('filename'))", "Medium Risk"),
+    ("account = Account.objects.get(id=request.GET['account_id'])", "Medium Risk"),
+
+    # ─── MEDIUM RISK: Security Misconfiguration ───────────────────────────
+    ("app.config['TESTING'] = True", "Medium Risk"),
+    ("DATABASES = {'default': {'ENGINE': 'django.db.backends.sqlite3', 'NAME': 'db.sqlite3'}}", "Medium Risk"),
+    ("server.listen(8080, '0.0.0.0')", "Medium Risk"),
+    ("app.config['PROPAGATE_EXCEPTIONS'] = True", "Medium Risk"),
+    ("response.headers['Server'] = 'Apache/2.4.41 (Ubuntu)'", "Medium Risk"),
+    ("app.config['MAX_CONTENT_LENGTH'] = None", "Medium Risk"),
+    ("STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]", "Medium Risk"),
+    ("DEBUG_TOOLBAR_PANELS = ['debug_toolbar.panels.sql.SQLPanel']", "Medium Risk"),
+    ("SHOW_TOOLBAR_CALLBACK = lambda r: True", "Medium Risk"),
+
+    # ─── MEDIUM RISK: Sensitive Data Exposure ────────────────────────────
+    ("return jsonify({'user': user.to_dict(), 'password_hash': user.password})", "Medium Risk"),
+    ("logger.info('Login attempt: user=%s pass=%s', username, password)", "Medium Risk"),
+    ("response.headers['X-Debug-Info'] = json.dumps(request.environ)", "Medium Risk"),
+    ("print(f'DB connection: {DATABASE_URL}')", "Medium Risk"),
+    ("raise Exception(f'DB error: {str(e)} - query: {query}')", "Medium Risk"),
+    ("return {'error': str(exception), 'traceback': traceback.format_exc()}", "Medium Risk"),
+    ("sys.stderr.write(f'Config: {config}\\n')", "Medium Risk"),
+
+    # ─── MEDIUM RISK: Insufficient Logging (CWE-778) ─────────────────────
+    ("except Exception: pass", "Medium Risk"),
+    ("except Exception as e: continue", "Medium Risk"),
+    ("try: authenticate(user, pw) except: return True", "Medium Risk"),
+    ("except AuthError: return {'status': 'ok'}", "Medium Risk"),
+
+    # ─── MEDIUM RISK: XML / JSON Bombs (CWE-776, CWE-400) ────────────────
+    ("xml.etree.ElementTree.parse(user_file)", "Medium Risk"),
+    ("json.loads(request.data, parse_constant=lambda x: x)", "Medium Risk"),
+    ("yaml.load(config_file)", "Medium Risk"),
+    ("import ast; ast.literal_eval(request.data)", "Medium Risk"),
+
+    # ─── MEDIUM RISK: Hardcoded Creds — Extended ─────────────────        
+    ("SLACK_BOT_TOKEN = 'xoxb-EXAMPLE-FAKE-TOKEN-REDACTED'", "Medium Risk"),
+    ("DISCORD_TOKEN = 'NTYwMjI2MTc3MDQ0MDIwNDg0.XXXXXX.YYYYYYYYYYYYYY'", "Medium Risk"),
+    ("PAYPAL_SECRET = 'EKr_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'", "Medium Risk"),
+    ("APPLE_PAY_KEY = '-----BEGIN EC PRIVATE KEY-----\\nABC123\\n-----END EC PRIVATE KEY-----'", "Medium Risk"),
+    ("FIREBASE_API_KEY = 'AIzaSyABCDEFGHIJKLMNOPQRSTUVWXYZ1234567'", "Medium Risk"),
+    ("OPENAI_API_KEY = 'sk-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX'", "Medium Risk"),
+    ("ANTHROPIC_API_KEY = 'sk-ant-api03-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX'", "Medium Risk"),
+    ("AZURE_STORAGE_KEY = 'DefaultEndpointsProtocol=https;AccountName=xxx;AccountKey=yyy;'", "Medium Risk"),
+    ("GCP_SERVICE_ACCOUNT = json.load(open('service_account.json'))", "Medium Risk"),
+    ("HEROKU_API_KEY = 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'", "Medium Risk"),
+    ("NPM_TOKEN = 'npm_EXAMPLE_FAKE_TOKEN_REDACTED'", "Medium Risk"),
+    ("DOCKER_PASSWORD = 'my_docker_password_123'", "Medium Risk"),
+    ("ssh_private_key = open('id_rsa').read()", "Medium Risk"),
+    ("private_key_data = open('/root/.ssh/id_rsa').read()", "Medium Risk"),
+    ("certificate = open('server.key').read()", "Medium Risk"),
+
+    # ─── MEDIUM RISK: Weak Password Policies ─────────────────────────────
+    ("MIN_PASSWORD_LENGTH = 4", "Medium Risk"),
+    ("PASSWORD_REGEX = r'.'", "Medium Risk"),
+    ("if len(password) >= 1: return True", "Medium Risk"),
+    ("def validate_password(pwd): return len(pwd) > 0", "Medium Risk"),
+    ("PASSWORD_VALIDATORS = []", "Medium Risk"),
+
+    # ─── MEDIUM RISK: Insecure Cookie ────────────────────────────────────
+    ("response.set_cookie('session', token)", "Medium Risk"),
+    ("resp.set_cookie('auth', jwt_token, httponly=False, secure=False)", "Medium Risk"),
+    ("document.cookie = 'session=' + token", "Medium Risk"),
+    ("res.cookie('auth', token, { httpOnly: false })", "Medium Risk"),
+    ("response.set_cookie('user_id', str(user.id), expires=datetime(2099, 1, 1))", "Medium Risk"),
+    ("Set-Cookie: session=abc123; Path=/", "Medium Risk"),
+
+    # ─── MEDIUM RISK: Information Disclosure ─────────────────────────────
+    ("return jsonify({'version': sys.version, 'platform': sys.platform})", "Medium Risk"),
+    ("return render_template('error.html', error=traceback.format_exc())", "Medium Risk"),
+    ("except Exception as e: return str(e), 500", "Medium Risk"),
+    ("app.errorhandler(500)(lambda e: (str(e), 500))", "Medium Risk"),
+    ("EXPOSE_HEADERS = ['X-Debug-Token', 'X-Debug-Token-Link']", "Medium Risk"),
+    ("return jsonify(request.environ)", "Medium Risk"),
+
+    # ─── MEDIUM RISK: Timing Attacks (CWE-208) ───────────────────────────
+    ("if stored_token == provided_token: grant_access()", "Medium Risk"),
+    ("if user.api_key == request.headers['X-API-Key']: return True", "Medium Risk"),
+    ("return password == stored_password", "Medium Risk"),
+    ("if computed_hash == expected_hash: return True", "Medium Risk"),
+
+    # ─── MEDIUM RISK: Prototype Pollution (JS) ───────────────────────────
+    ("Object.assign(config, req.body)", "Medium Risk"),
+    ("_.merge(defaults, req.body)", "Medium Risk"),
+    ("const merged = { ...defaults, ...req.query }", "Medium Risk"),
+    ("deepmerge(config, JSON.parse(req.body))", "Medium Risk"),
+
+    # ─── SAFE: Secure Django patterns ────────────────────────────────────
+    ("User.objects.filter(username=username, is_active=True).first()", "Safe"),
+    ("qs = User.objects.filter(pk__in=[int(i) for i in safe_ids])", "Safe"),
+    ("from django.db import connection; cursor = connection.cursor(); cursor.execute('SELECT * FROM auth_user WHERE id = %s', [user_id])", "Safe"),
+    ("user = get_object_or_404(User, pk=user_id)", "Safe"),
+    ("queryset = MyModel.objects.filter(owner=request.user)", "Safe"),
+    ("form = UserForm(request.POST); form.is_valid(); form.save()", "Safe"),
+    ("from django.contrib.auth.hashers import make_password; hashed = make_password(password)", "Safe"),
+    ("from django.contrib.auth import authenticate; user = authenticate(username=u, password=p)", "Safe"),
+    ("from django.views.decorators.csrf import csrf_protect; @csrf_protect", "Safe"),
+    ("from django.utils.html import escape; safe_text = escape(user_input)", "Safe"),
+    ("HttpResponse(content_type='application/json').headers['X-Content-Type-Options'] = 'nosniff'", "Safe"),
+    ("SECURE_BROWSER_XSS_FILTER = True", "Safe"),
+    ("SECURE_CONTENT_TYPE_NOSNIFF = True", "Safe"),
+    ("X_FRAME_OPTIONS = 'DENY'", "Safe"),
+    ("CSRF_COOKIE_SECURE = True", "Safe"),
+    ("SESSION_COOKIE_SECURE = True", "Safe"),
+    ("SECURE_SSL_REDIRECT = True", "Safe"),
+    ("ALLOWED_HOSTS = ['myapp.example.com']", "Safe"),
+    ("PASSWORD_HASHERS = ['django.contrib.auth.hashers.Argon2PasswordHasher']", "Safe"),
+
+    # ─── SAFE: Secure Flask patterns ─────────────────────────────────────
+    ("@app.before_request; def check_auth(): if not current_user.is_authenticated: abort(401)", "Safe"),
+    ("app.config['SESSION_COOKIE_SAMESITE'] = 'Strict'", "Safe"),
+    ("talisman = Talisman(app, content_security_policy={'default-src': ['self']})", "Safe"),
+    ("from flask_limiter import Limiter; limiter = Limiter(app, key_func=get_remote_address)", "Safe"),
+    ("@login_required; @permission_required('app.view_admin')", "Safe"),
+    ("from flask_wtf.csrf import CSRFProtect; csrf = CSRFProtect(app)", "Safe"),
+    ("secure_filename(file.filename); os.path.join(app.config['UPLOAD_FOLDER'], fn)", "Safe"),
+    ("from itsdangerous import TimestampSigner; s = TimestampSigner(secret_key)", "Safe"),
+    ("from cryptography.hazmat.primitives.ciphers.aead import AESGCM; AESGCM(key).encrypt(nonce, data, aad)", "Safe"),
+
+    # ─── SAFE: Secure Node.js / Express patterns ──────────────────────────
+    ("const helmet = require('helmet'); app.use(helmet())", "Safe"),
+    ("const rateLimit = require('express-rate-limit'); app.use(rateLimit({ max: 100 }))", "Safe"),
+    ("const xss = require('xss-clean'); app.use(xss())", "Safe"),
+    ("const mongoSanitize = require('express-mongo-sanitize'); app.use(mongoSanitize())", "Safe"),
+    ("const validator = require('validator'); validator.isEmail(req.body.email)", "Safe"),
+    ("bcrypt.genSalt(12, (err, salt) => bcrypt.hash(password, salt, callback))", "Safe"),
+    ("const token = require('crypto').randomBytes(64).toString('hex')", "Safe"),
+    ("app.use(session({ secret: process.env.SESSION_SECRET, resave: false, saveUninitialized: false, cookie: { secure: true, httpOnly: true } }))", "Safe"),
+    ("const { body, validationResult } = require('express-validator'); body('email').isEmail().normalizeEmail()", "Safe"),
+    ("const sanitized = validator.escape(req.body.input)", "Safe"),
+    ("const safe = encodeURIComponent(userInput)", "Safe"),
+    ("res.set('Content-Security-Policy', \"default-src 'self'\")", "Safe"),
+    ("app.use((req, res, next) => { res.setHeader('X-Frame-Options', 'DENY'); next(); })", "Safe"),
+    ("const db = require('mysql2/promise'); const [rows] = await db.execute('SELECT * FROM users WHERE id = ?', [id])", "Safe"),
+    ("const { Pool } = require('pg'); pool.query('SELECT * FROM users WHERE id = $1', [userId])", "Safe"),
+
+    # ─── SAFE: Secure Spring / Java patterns ──────────────────────────────
+    ("@PreAuthorize(\"hasRole('ADMIN')\")", "Safe"),
+    ("@Secured('ROLE_USER')", "Safe"),
+    ("String sql = 'SELECT * FROM users WHERE id = ?'; jdbcTemplate.queryForObject(sql, new Object[]{id}, User.class);", "Safe"),
+    ("CriteriaBuilder cb = em.getCriteriaBuilder(); CriteriaQuery<User> cq = cb.createQuery(User.class);", "Safe"),
+    ("@RequestMapping(method = RequestMethod.POST); @Valid @RequestBody UserDto userDto", "Safe"),
+    ("BCryptPasswordEncoder encoder = new BCryptPasswordEncoder(); encoder.encode(password);", "Safe"),
+    ("MessageDigest digest = MessageDigest.getInstance('SHA-256'); byte[] hash = digest.digest(data.getBytes(StandardCharsets.UTF_8));", "Safe"),
+    ("SecureRandom random = new SecureRandom(); byte[] salt = new byte[16]; random.nextBytes(salt);", "Safe"),
+    ("response.setHeader('Content-Security-Policy', \"default-src 'self'\");", "Safe"),
+    ("response.setHeader('X-Content-Type-Options', 'nosniff');", "Safe"),
+
+    # ─── SAFE: Secure PHP / Laravel patterns ─────────────────────────────
+    ("$stmt = $pdo->prepare('SELECT * FROM users WHERE id = ?'); $stmt->execute([$id]); $user = $stmt->fetch();", "Safe"),
+    ("$user = User::find($id);", "Safe"),
+    ("$users = DB::select('SELECT * FROM users WHERE active = ?', [true]);", "Safe"),
+    ("$name = filter_var($_GET['name'], FILTER_SANITIZE_STRING);", "Safe"),
+    ("$email = filter_var($_POST['email'], FILTER_VALIDATE_EMAIL);", "Safe"),
+    ("$clean = strip_tags($_POST['content']);", "Safe"),
+    ("echo htmlentities($user_input, ENT_QUOTES, 'UTF-8');", "Safe"),
+    ("$hashed = password_hash($password, PASSWORD_ARGON2ID);", "Safe"),
+    ("hash_equals($computed, $provided)", "Safe"),
+    ("$token = bin2hex(random_bytes(32));", "Safe"),
+    ("csrf_field()", "Safe"),
+    ("return response()->json($data)->header('X-Frame-Options', 'DENY');", "Safe"),
+
+    # ─── SAFE: Secure input parsing ───────────────────────────────────────
+    ("data = json.loads(request.data.decode('utf-8')); validate(data, schema)", "Safe"),
+    ("from voluptuous import Schema, Required; Schema({Required('id'): int})(data)", "Safe"),
+    ("from cerberus import Validator; v = Validator(schema); v.validate(document)", "Safe"),
+    ("from jsonschema import validate; validate(instance=data, schema=schema)", "Safe"),
+    ("page = max(1, min(1000, int(request.args.get('page', 1))))", "Safe"),
+    ("safe_int = abs(int(value)) % MAX_LIMIT", "Safe"),
+    ("if not all(c.isalnum() or c == '_' for c in identifier): raise ValueError('Bad identifier')", "Safe"),
+    ("allowed_tables = {'users', 'products', 'orders'}; assert table_name in allowed_tables", "Safe"),
+    ("allowed_columns = ['id', 'name', 'email']; assert col in allowed_columns", "Safe"),
+    ("if field not in WHITELIST_FIELDS: abort(400, 'Invalid field')", "Safe"),
+
+    # ─── SAFE: Secure file / path handling ───────────────────────────────
+    ("import pathlib; p = pathlib.Path(base_dir) / filename; p.resolve().relative_to(base_dir)", "Safe"),
+    ("base = pathlib.Path('/var/www/uploads').resolve(); target = (base / filename).resolve(); target.relative_to(base)", "Safe"),
+    ("UPLOAD_EXTENSIONS = {'.jpg', '.png', '.pdf'}; ext = pathlib.Path(filename).suffix.lower(); assert ext in UPLOAD_EXTENSIONS", "Safe"),
+    ("import magic; mime = magic.from_buffer(file.read(2048), mime=True); assert mime in ALLOWED_MIMES", "Safe"),
+    ("from werkzeug.utils import secure_filename; fn = secure_filename(uploaded.filename); assert fn", "Safe"),
+    ("tmpfile = tempfile.NamedTemporaryFile(delete=False, dir='/tmp', suffix='.csv')", "Safe"),
+
+    # ─── SAFE: Secure subprocess ──────────────────────────────────────────
+    ("result = subprocess.run(['ffmpeg', '-i', safe_input_path, output_path], capture_output=True, timeout=30)", "Safe"),
+    ("out = subprocess.check_output(['identify', '-format', '%w %h', safe_path], shell=False)", "Safe"),
+    ("proc = subprocess.Popen(['/usr/bin/php', '-l', php_file], stdout=subprocess.PIPE, stderr=subprocess.PIPE)", "Safe"),
+    ("subprocess.run(['openssl', 'genrsa', '-out', keyfile, '4096'], check=True)", "Safe"),
+    ("result = subprocess.run(['nmap', '-sV', '-p', '80,443', safe_ip], capture_output=True, timeout=60)", "Safe"),
+
+    # ─── SAFE: Secure AWS / cloud ─────────────────────────────────────────
+    ("s3 = boto3.client('s3'); obj = s3.get_object(Bucket=BUCKET_NAME, Key=safe_key)", "Safe"),
+    ("s3.put_object(Bucket=bucket, Key=key, Body=data, ServerSideEncryption='AES256')", "Safe"),
+    ("bucket_policy = json.loads(s3.get_bucket_policy(Bucket=bucket)['Policy'])", "Safe"),
+    ("session = boto3.Session(profile_name=os.environ['AWS_PROFILE'])", "Safe"),
+    ("secrets = boto3.client('secretsmanager').get_secret_value(SecretId=os.environ['SECRET_ARN'])", "Safe"),
+
+    # ─── SAFE: Secure cookie handling ────────────────────────────────────
+    ("response.set_cookie('session', token, httponly=True, secure=True, samesite='Strict')", "Safe"),
+    ("resp.set_cookie('auth', jwt_token, httponly=True, secure=True, max_age=3600)", "Safe"),
+    ("res.cookie('session', token, { httpOnly: true, secure: true, sameSite: 'strict' })", "Safe"),
+    ("setcookie('session', $token, ['httponly' => true, 'secure' => true, 'samesite' => 'Strict']);", "Safe"),
+
+    # ─── SAFE: Secure CORS ────────────────────────────────────────────────
+    ("CORS(app, origins=['https://myapp.example.com'], supports_credentials=True)", "Safe"),
+    ("app.use(cors({ origin: 'https://trusted.example.com', credentials: true }))", "Safe"),
+    ("response.headers['Access-Control-Allow-Origin'] = 'https://myapp.example.com'", "Safe"),
+    ("CORS_ALLOWED_ORIGINS = ['https://frontend.example.com']", "Safe"),
+
+    # ─── SAFE: Secure tokens / timing ────────────────────────────────────
+    ("hmac.compare_digest(expected_token.encode(), provided_token.encode())", "Safe"),
+    ("if not secrets.compare_digest(a, b): raise AuthError('Token mismatch')", "Safe"),
+    ("itsdangerous.constant_time_compare(sig1, sig2)", "Safe"),
+    ("time.sleep(random.uniform(0.1, 0.3))", "Safe"),
+    ("if not hmac.compare_digest(hash_a, hash_b): abort(403)", "Safe"),
+
+    # ─── SAFE: Secure logging ─────────────────────────────────────────────
+    ("logging.info('Login attempt for user_id=%s', user_id)", "Safe"),
+    ("logger.warning('Failed login for user=%s from ip=%s', user_id, request.remote_addr)", "Safe"),
+    ("audit_logger.info('Admin action: %s by %s', action, current_user.id)", "Safe"),
+    ("logger.error('DB error on query %s: %s', query_type, error_code)", "Safe"),
+    ("logging.info('File upload: size=%d, type=%s', file_size, safe_mime_type)", "Safe"),
+
+    # ─── SAFE: Multi-line function patterns (realistic code) ──────────────
+    ("def get_user_safe(user_id):\n    if not str(user_id).isdigit():\n        return None\n    return db.execute('SELECT * FROM users WHERE id = ?', (int(user_id),)).fetchone()", "Safe"),
+    ("def process_upload(file):\n    fn = secure_filename(file.filename)\n    ext = os.path.splitext(fn)[1].lower()\n    if ext not in {'.jpg', '.png', '.pdf'}:\n        abort(400)\n    file.save(os.path.join(UPLOAD_FOLDER, fn))", "Safe"),
+    ("def create_token(user_id):\n    payload = {'sub': user_id, 'exp': datetime.utcnow() + timedelta(hours=1), 'iat': datetime.utcnow()}\n    return jwt.encode(payload, os.environ['JWT_SECRET'], algorithm='HS256')", "Safe"),
+    ("def verify_webhook(payload, signature):\n    expected = hmac.new(WEBHOOK_SECRET.encode(), payload, hashlib.sha256).hexdigest()\n    if not hmac.compare_digest(expected, signature):\n        abort(403)", "Safe"),
+
+    # ─── HIGH RISK: Multi-line dangerous patterns ─────────────────────────
+    ("def search(query):\n    sql = 'SELECT * FROM products WHERE name LIKE \\'' + query + '%\\''\n    return db.execute(sql).fetchall()", "High Risk"),
+    ("def run_report(params):\n    cmd = 'generate_report.sh ' + params['date'] + ' ' + params['format']\n    return os.popen(cmd).read()", "High Risk"),
+    ("def render_page(name):\n    tpl = open('templates/' + name + '.html').read()\n    return render_template_string(tpl, user=current_user)", "High Risk"),
+    ("def load_plugin(name):\n    module = importlib.import_module('plugins.' + name)\n    return module.run(request.json)", "High Risk"),
+    ("def process_config(raw):\n    config = yaml.load(raw)\n    return config", "High Risk"),
+
+    # ─── MEDIUM RISK: Multi-line problematic patterns ─────────────────────
+    ("def connect_db():\n    host = os.environ.get('DB_HOST', 'localhost')\n    pwd = 'default_password'\n    return pymysql.connect(host=host, password=pwd)", "Medium Risk"),
+    ("def get_api_key():\n    # TODO: move to environment variable\n    return 'sk-live-hardcoded-key-xyz'\n", "Medium Risk"),
+    ("def login(username, password):\n    user = User.query.filter_by(username=username).first()\n    if user and user.password == password:\n        return True", "Medium Risk"),
+    ("def check_token(token):\n    stored = db.get_token()\n    return token == stored", "Medium Risk"),
+    ("def hash_pass(pwd):\n    return hashlib.md5(pwd.encode()).hexdigest()", "Medium Risk"),
+    # === EXTENDED v3 — Boosting Medium Risk recall ========================
+    # Medium Risk = security weakness, NOT directly exploitable with user input
+    # (unlike High Risk = direct injection/RCE possible)
+    # =====================================================================
+
+    # -- Hardcoded credentials, more variants ---
+    ("API_SECRET = 'my-api-secret-key'", "Medium Risk"),
+    ("POSTGRES_PASSWORD = 'postgres'", "Medium Risk"),
+    ("MYSQL_ROOT_PASSWORD = 'root'", "Medium Risk"),
+    ("REDIS_PASSWORD = 'redis123'", "Medium Risk"),
+    ("RABBITMQ_DEFAULT_PASS = 'guest'", "Medium Risk"),
+    ("admin_password = '123456'", "Medium Risk"),
+    ("test_password = 'password'", "Medium Risk"),
+    ("default_key = 'changeme'", "Medium Risk"),
+    ("secret = 'abc123'", "Medium Risk"),
+    ("DB_URI = 'mysql://user:password@127.0.0.1:3306/mydb'", "Medium Risk"),
+    ("ftp_credentials = {'host': 'ftp.example.com', 'user': 'admin', 'pass': 'ftp123'}", "Medium Risk"),
+    ("SMTP_PASSWORD = 'emailpass123'", "Medium Risk"),
+    ("ldap_bind_password = 'ldappass'", "Medium Risk"),
+    ("NPM_AUTH_TOKEN = 'npm_EXAMPLE_FAKE_TOKEN_REDACTED'", "Medium Risk"),
+    ("DOCKER_HUB_PASSWORD = 'my_docker_pass'", "Medium Risk"),
+    ("ssh_private_key = open('id_rsa').read()", "Medium Risk"),
+    ("certificate = open('server.key').read()", "Medium Risk"),
+
+    # -- Weak cryptography ---
+    ("cipher = DES.new(key, DES.MODE_ECB)", "Medium Risk"),
+    ("cipher = ARC4.new(key)", "Medium Risk"),
+    ("digest = hashlib.new('sha1', data).hexdigest()", "Medium Risk"),
+    ("crc = binascii.crc32(data)", "Medium Risk"),
+    ("mac = hmac.new(b'weak', msg, hashlib.md5).digest()", "Medium Risk"),
+    ("key = b'0123456789abcdef'", "Medium Risk"),
+    ("ITERATIONS = 100", "Medium Risk"),
+    ("pbkdf2 = hashlib.pbkdf2_hmac('sha1', pwd, salt, 1000)", "Medium Risk"),
+    ("token = uuid.uuid4().hex", "Medium Risk"),
+    ("session_id = str(int(time.time()))", "Medium Risk"),
+    ("nonce = str(random.getrandbits(64))", "Medium Risk"),
+    ("salt = 'fixed_salt_value'", "Medium Risk"),
+
+    # -- Insecure config flags ---
+    ("SECURE_HSTS_SECONDS = 0", "Medium Risk"),
+    ("SESSION_EXPIRE_AT_BROWSER_CLOSE = False", "Medium Risk"),
+    ("PERMANENT_SESSION_LIFETIME = timedelta(days=365)", "Medium Risk"),
+    ("JSONIFY_PRETTYPRINT_REGULAR = True", "Medium Risk"),
+    ("TEMPLATES_AUTO_RELOAD = True", "Medium Risk"),
+    ("PRESERVE_CONTEXT_ON_EXCEPTION = True", "Medium Risk"),
+    ("DEFAULT_PERMISSION_CLASSES = ['rest_framework.permissions.AllowAny']", "Medium Risk"),
+    ("REST_FRAMEWORK = {'DEFAULT_AUTHENTICATION_CLASSES': []}", "Medium Risk"),
+    ("app.config['DEBUG_TB_ENABLED'] = True", "Medium Risk"),
+    ("app.config['LOGIN_DISABLED'] = True", "Medium Risk"),
+    ("MIDDLEWARE = []", "Medium Risk"),
+
+    # -- Debug logging of sensitive data ---
+    ("app.logger.debug('Request data: %s', request.data)", "Medium Risk"),
+    ("logger.debug('Headers: %s', dict(request.headers))", "Medium Risk"),
+    ("print('Auth token:', auth_token)", "Medium Risk"),
+    ("log.info('User data: %s', json.dumps(user.__dict__))", "Medium Risk"),
+    ("logging.debug('SQL: %s PARAMS: %s', sql, params)", "Medium Risk"),
+    ("print(request.cookies)", "Medium Risk"),
+    ("app.debug = True; logging.basicConfig(level=logging.DEBUG)", "Medium Risk"),
+
+    # -- Missing access control (unauthenticated endpoints) ---
+    ("@app.route('/admin/users'); def list_users(): return jsonify(User.query.all())", "Medium Risk"),
+    ("@app.route('/api/internal'); def internal_api(): return jsonify(internal_data())", "Medium Risk"),
+    ("@app.route('/export'); def export_data(): return send_file('backup.sql')", "Medium Risk"),
+    ("def get_all_users(): return db.session.query(User).all()", "Medium Risk"),
+    ("def delete_account(user_id): User.query.filter_by(id=user_id).delete()", "Medium Risk"),
+
+    # -- Insecure transport (cleartext protocols) ---
+    ("smtp = smtplib.SMTP('smtp.example.com', 587)", "Medium Risk"),
+    ("ftp = ftplib.FTP('ftp.example.com')", "Medium Risk"),
+    ("conn = telnetlib.Telnet('192.168.1.1', 23)", "Medium Risk"),
+    ("http_client = http.client.HTTPConnection('api.example.com')", "Medium Risk"),
+    ("urllib.request.urlopen('http://api.example.com/data')", "Medium Risk"),
+
+    # -- Weak session tokens ---
+    ("session_token = hashlib.md5(username.encode()).hexdigest()", "Medium Risk"),
+    ("session_id = base64.b64encode(username.encode()).decode()", "Medium Risk"),
+    ("csrf_token = str(user_id) + str(int(time.time()))", "Medium Risk"),
+    ("auth_header = base64.b64encode(f'{username}:{password}'.encode()).decode()", "Medium Risk"),
+
+    # -- Predictable OTP / token generation ---
+    ("otp = random.randint(100000, 999999)", "Medium Risk"),
+    ("reset_token = str(random.randint(0, 999999)).zfill(6)", "Medium Risk"),
+    ("temp_password = ''.join(random.choices(string.ascii_letters, k=8))", "Medium Risk"),
+    ("invoice_id = int(time.time())", "Medium Risk"),
+
+    # -- Overly permissive file permissions ---
+    ("os.chmod(uploaded_file, 0o777)", "Medium Risk"),
+    ("os.chmod('/var/www/uploads', 0o777)", "Medium Risk"),
+    ("os.makedirs(dir_path, mode=0o777, exist_ok=True)", "Medium Risk"),
+
+    # -- Silent exception swallowing ---
+    ("except PermissionError: pass", "Medium Risk"),
+    ("except AuthenticationError: continue", "Medium Risk"),
+
+    # -- Weak password validation ---
+    ("MIN_PASSWORD_LENGTH = 4", "Medium Risk"),
+    ("if len(password) >= 1: return True", "Medium Risk"),
+    ("PASSWORD_VALIDATORS = []", "Medium Risk"),
+    ("def check_password_strength(p): return len(p) >= 4", "Medium Risk"),
+
+    # -- Information leakage ---
+    ("return jsonify({'version': sys.version, 'platform': sys.platform})", "Medium Risk"),
+    ("return render_template('error.html', error=traceback.format_exc())", "Medium Risk"),
+    ("except Exception as e: return str(e), 500", "Medium Risk"),
+    ("EXPOSE_HEADERS = ['X-Debug-Token', 'X-Debug-Token-Link']", "Medium Risk"),
+    ("return jsonify(request.environ)", "Medium Risk"),
+
+    # -- Timing attack vulnerable comparisons ---
+    ("if stored_token == provided_token: grant_access()", "Medium Risk"),
+    ("if user.api_key == request.headers['X-API-Key']: return True", "Medium Risk"),
+    ("return password == stored_password", "Medium Risk"),
+
+    # -- Insecure cookie settings ---
+    ("response.set_cookie('session', token)", "Medium Risk"),
+    ("resp.set_cookie('auth', jwt_token, httponly=False, secure=False)", "Medium Risk"),
+    ("document.cookie = 'session=' + token", "Medium Risk"),
+    ("res.cookie('auth', token, { httpOnly: false })", "Medium Risk"),
+
+]
+
+
+def main():
+    # Deduplicate by code
+    seen = set()
+    unique = []
+    for code, label in SAMPLES:
+        key = code.strip()
+        if key not in seen:
+            seen.add(key)
+            unique.append((code, label))
+
+    with open(OUTPUT, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f, quoting=csv.QUOTE_ALL)
+        writer.writerow(['code', 'label'])
+        for code, label in unique:
+            writer.writerow([code, label])
+
+    # Count per class
+    from collections import Counter
+    counts = Counter(label for _, label in unique)
+    total = sum(counts.values())
+    print(f"Dataset written to: {OUTPUT}")
+    print(f"Total unique rows: {total}")
+    for label, count in sorted(counts.items()):
+        pct = count / total * 100
+        print(f"  {label:<15}: {count:>4} ({pct:.1f}%)")
+
+
+if __name__ == '__main__':
+    main()
+

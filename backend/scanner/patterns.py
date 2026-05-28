@@ -70,23 +70,51 @@ VULNERABILITY_PATTERNS = [
     },
 
     # ── SQL Injection ─────────────────────────────────────────────────────
+    # NOTE: Patterns are anchored to string literals to avoid false positives
+    # on NoSQL codebases (MongoDB, DynamoDB, etc.) that use Python dicts/objects.
     {
         "name": "SQL Injection (Concatenation)",
-        "regex": r"(SELECT|INSERT|UPDATE|DELETE|FROM|WHERE).*[\+].*",
+        # Must be inside a string literal (quote before keyword) AND use + concatenation
+        # Excludes lines that look like NoSQL (no quotes around SQL keyword)
+        "regex": r"['\"].*(SELECT|INSERT|UPDATE|DELETE).*['\"]\s*\+|\+\s*['\"].*(SELECT|INSERT|UPDATE|DELETE)",
         "severity": "High",
         "description": "String-concatenation in SQL queries enables injection — use parameterised queries."
     },
     {
         "name": "SQL Injection (f-string)",
-        "regex": r"f['\"].*(SELECT|INSERT|UPDATE|DELETE).*\{",
+        # f-string must contain a SQL keyword AND a { interpolation
+        "regex": r"f['\"].*(SELECT|INSERT|UPDATE|DELETE|FROM\s+\w+\s+WHERE).*\{",
         "severity": "High",
         "description": "f-strings in SQL are not sanitised — use parameterised queries instead."
     },
     {
         "name": "SQL Injection (.format)",
-        "regex": r"['\"].*(SELECT|INSERT|UPDATE|DELETE).*['\"].*\.format\s*\(",
+        # .format() call on a string containing a SQL keyword
+        "regex": r"['\"].*(SELECT|INSERT|UPDATE|DELETE).*['\"]\s*\.format\s*\(",
         "severity": "High",
         "description": ".format() in SQL is vulnerable to injection. Use ? / %s placeholders."
+    },
+    {
+        "name": "SQL Injection (% formatting)",
+        # Old-style % formatting on SQL strings
+        "regex": r"['\"].*(SELECT|INSERT|UPDATE|DELETE).*['\"](\s*%\s*|\s*%\s*\()",
+        "severity": "High",
+        "description": "%-formatting in SQL queries is vulnerable to injection. Use parameterised queries."
+    },
+    # ── NoSQL Injection ───────────────────────────────────────────────────
+    {
+        "name": "NoSQL Injection (MongoDB $where)",
+        # $where with user-controlled input is a NoSQL injection vector
+        "regex": r"\$where.*?(request|req|input|args|params|body|query|user|data)",
+        "severity": "High",
+        "description": "MongoDB $where with user input enables NoSQL injection — use $eq/$in operators instead."
+    },
+    {
+        "name": "NoSQL Injection (dynamic operator)",
+        # Building a MongoDB query dict with user-supplied keys (enables operator injection)
+        "regex": r"\{\s*(request|req|input|args|params|body|user).*\$|\.find\s*\(\s*(request|req|input|args|body)",
+        "severity": "High",
+        "description": "Passing user input directly as MongoDB query keys allows operator injection attacks."
     },
 
     # ── Hardcoded Secrets ─────────────────────────────────────────────────
@@ -269,9 +297,9 @@ VIBE_CODING_PATTERNS = [
     {"name": "Debug Code in Production",
      "regex": r"(print\s*\(.*password|debug\s*=\s*True|console\.log.*token)",
      "weight": 7},
-    # SQL concatenation
+    # SQL concatenation (must be inside a string literal to avoid NoSQL false positives)
     {"name": "SQL Concatenation",
-     "regex": r"(SELECT|INSERT|UPDATE|DELETE).*\+",
+     "regex": r"['\"].*(SELECT|INSERT|UPDATE|DELETE).*['\"]\s*\+|\+\s*['\"].*(SELECT|INSERT|UPDATE|DELETE)",
      "weight": 15},
     # Disable SSL
     {"name": "SSL Disabled",

@@ -311,11 +311,11 @@ def compute_security_maturity(findings, stats, all_entry_points):
         maturity_score -= secrets * 10
         indicators.append(f"⚠ {secrets} hardcoded secrets — not using env vars")
 
-    # Check if any SQL injection patterns present
-    sql_issues = sum(1 for f in findings if "SQL" in f["issue"])
+    # Check if any SQL or NoSQL injection patterns present
+    sql_issues = sum(1 for f in findings if "SQL" in f["issue"] or "NoSQL" in f["issue"])
     if sql_issues > 0:
         maturity_score -= sql_issues * 8
-        indicators.append("⚠ Raw SQL construction detected — no parameterised queries")
+        indicators.append("⚠ Raw query construction detected — use parameterised queries or safe ORM methods")
 
     # Large exposed attack surface
     high_entries = sum(1 for e in all_entry_points if e.get("severity") == "High")
